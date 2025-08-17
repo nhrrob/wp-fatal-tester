@@ -37,12 +37,12 @@ composer require --dev nhrrob/wp-fatal-tester
 
 Test the current directory (auto-detects plugin name):
 ```bash
-php vendor/bin/fataltest
+vendor/bin/fataltest
 ```
 
 Test a specific plugin:
 ```bash
-php vendor/bin/fataltest my-plugin
+vendor/bin/fataltest my-plugin
 ```
 
 ### What It Tests
