@@ -10,8 +10,9 @@ if (isset($GLOBALS['_composer_autoload_path'])) {
     $scriptDir = dirname($scriptPath);
 
     $autoloaderPaths = [
+        $scriptDir . '/vendor/autoload.php', // When running from package root
         dirname($scriptDir) . '/autoload.php', // When running from vendor/bin
-        dirname($scriptDir, 2) . '/autoload.php', // When running from package root
+        dirname($scriptDir, 2) . '/autoload.php', // When running from vendor/bin (alternative)
         $scriptDir . '/../autoload.php', // Alternative path
     ];
 

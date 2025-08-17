@@ -1,19 +1,52 @@
 {
   "name": "nhrrob/wp-fatal-tester",
-  "description": "CLI tool to test WordPress plugins for fatal errors.",
+  "description": "A comprehensive CLI tool to detect fatal PHP errors and compatibility issues in WordPress plugins and themes",
   "type": "library",
   "license": "MIT",
+  "keywords": [
+    "wordpress",
+    "php",
+    "testing",
+    "fatal-errors",
+    "compatibility",
+    "cli",
+    "plugin",
+    "theme"
+  ],
+  "homepage": "https://github.com/nhrrob/wp-fatal-tester",
+  "authors": [
+    {
+      "name": "NHRROB",
+      "email": "robin.sust08@gmail.com",
+      "homepage": "https://github.com/nhrrob"
+    }
+  ],
+  "support": {
+    "issues": "https://github.com/nhrrob/wp-fatal-tester/issues",
+    "source": "https://github.com/nhrrob/wp-fatal-tester"
+  },
   "autoload": {
     "psr-4": {
       "NHRROB\\WPFatalTester\\": "src/"
     }
   },
   "bin": [
-    "fatal",
-    "fataltest",
-    "wpfataltest"
+    "fataltest"
   ],
   "require": {
     "php": ">=7.4"
-  }
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^9.0|^10.0"
+  },
+  "scripts": {
+    "test": "phpunit",
+    "test-coverage": "phpunit --coverage-html coverage"
+  },
+  "config": {
+    "optimize-autoloader": true,
+    "sort-packages": true
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true
 }
