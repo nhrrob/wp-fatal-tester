@@ -1,9 +1,11 @@
 #!/usr/bin/env php
 <?php
-require __DIR__ . '/../autoload.php'; // points to EA plugin's vendor/autoload.php
+
+require dirname(__DIR__) . '/autoload.php'; // goes up from vendor/bin/ to vendor/autoload.php
 
 use NHRROB\WPFatalTester\FatalTester;
 
+// Auto-detect plugin folder if no argument is given
 $plugin = $argv[1] ?? basename(getcwd());
 
 $tester = new FatalTester();
