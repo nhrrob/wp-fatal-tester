@@ -1,0 +1,19 @@
+{
+  "name": "nhrrob/wp-fatal-tester",
+  "description": "CLI tool to test WordPress plugins for fatal errors.",
+  "type": "library",
+  "license": "MIT",
+  "autoload": {
+    "psr-4": {
+      "NHRROB\\WPFatalTester\\": "src/"
+    }
+  },
+  "bin": [
+    "fatal",
+    "fataltest",
+    "wpfataltest"
+  ],
+  "require": {
+    "php": ">=7.4"
+  }
+}
