@@ -1,0 +1,23 @@
+# Composer dependencies
+/vendor/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test coverage reports
+/coverage/
+*.coverage
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+*.temp
