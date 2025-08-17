@@ -1,7 +1,38 @@
 #!/usr/bin/env php
 <?php
 
-require dirname(__DIR__) . '/autoload.php'; // goes up from vendor/bin/ to vendor/autoload.php
+// Use Composer's autoloader path if available (when run via Composer proxy)
+if (isset($GLOBALS['_composer_autoload_path'])) {
+    require $GLOBALS['_composer_autoload_path'];
+} else {
+    // Handle both direct execution and symlink execution
+    $scriptPath = $_SERVER['SCRIPT_FILENAME'] ?? __FILE__;
+    $scriptDir = dirname($scriptPath);
+
+    $autoloaderPaths = [
+        dirname($scriptDir) . '/autoload.php', // When running from vendor/bin
+        dirname($scriptDir, 2) . '/autoload.php', // When running from package root
+        $scriptDir . '/../autoload.php', // Alternative path
+    ];
+
+    $autoloaderFound = false;
+    foreach ($autoloaderPaths as $autoloaderPath) {
+        if (file_exists($autoloaderPath)) {
+            require $autoloaderPath;
+            $autoloaderFound = true;
+            break;
+        }
+    }
+
+    if (!$autoloaderFound) {
+        echo "Error: Could not find Composer autoloader. Please run 'composer install' first.\n";
+        echo "Searched paths:\n";
+        foreach ($autoloaderPaths as $path) {
+            echo "  - $path\n";
+        }
+        exit(1);
+    }
+}
 
 use NHRROB\WPFatalTester\FatalTester;
 
