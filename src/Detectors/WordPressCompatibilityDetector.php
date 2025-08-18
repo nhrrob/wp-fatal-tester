@@ -212,7 +212,7 @@ class WordPressCompatibilityDetector implements ErrorDetectorInterface {
             'funky_javascript_fix' => ['removed' => '3.0.0', 'replacement' => null],
             'is_taxonomy' => ['removed' => '3.0.0', 'replacement' => 'taxonomy_exists'],
             'is_term' => ['removed' => '3.0.0', 'replacement' => 'term_exists'],
-            'sanitize_url' => ['removed' => '3.0.0', 'replacement' => 'esc_url_raw'],
+            // Note: sanitize_url() was restored in WordPress 5.9.0 and is no longer deprecated
             'clean_url' => ['removed' => '3.0.0', 'replacement' => 'esc_url'],
             'js_escape' => ['removed' => '3.0.0', 'replacement' => 'esc_js'],
             'wp_specialchars' => ['removed' => '2.8.0', 'replacement' => 'esc_html'],
