@@ -278,33 +278,129 @@ class ClassConflictDetector implements ErrorDetectorInterface {
 
     private function isPHPBuiltinClass(string $className): bool {
         $builtinClasses = [
-            'stdClass', 'Exception', 'ErrorException', 'Error', 'ParseError', 'TypeError', 'ArgumentCountError',
+            // Core PHP classes
+            'stdClass', 'Closure', 'Generator', 'WeakReference',
+
+            // Exception hierarchy
+            'Exception', 'ErrorException', 'Error', 'ParseError', 'TypeError', 'ArgumentCountError',
             'ArithmeticError', 'DivisionByZeroError', 'CompileError', 'AssertionError',
+            'LogicException', 'BadFunctionCallException', 'BadMethodCallException', 'DomainException',
+            'InvalidArgumentException', 'LengthException', 'OutOfRangeException',
+            'RuntimeException', 'OutOfBoundsException', 'OverflowException', 'RangeException',
+            'UnderflowException', 'UnexpectedValueException',
+
+            // Date/Time classes
             'DateTime', 'DateTimeImmutable', 'DateInterval', 'DatePeriod', 'DateTimeZone',
+
+            // Database classes
             'PDO', 'PDOStatement', 'PDOException',
-            'mysqli', 'mysqli_stmt', 'mysqli_result',
-            'DOMDocument', 'DOMElement', 'DOMNode', 'DOMNodeList', 'DOMXPath',
-            'SimpleXMLElement', 'XMLReader', 'XMLWriter',
-            'SplFileInfo', 'SplFileObject', 'DirectoryIterator', 'RecursiveDirectoryIterator',
-            'ArrayIterator', 'ArrayObject', 'SplObjectStorage',
+            'mysqli', 'mysqli_stmt', 'mysqli_result', 'mysqli_driver', 'mysqli_warning',
+
+            // XML/DOM classes
+            'DOMDocument', 'DOMElement', 'DOMNode', 'DOMNodeList', 'DOMXPath', 'DOMAttr',
+            'DOMCharacterData', 'DOMComment', 'DOMDocumentFragment', 'DOMDocumentType',
+            'DOMEntity', 'DOMEntityReference', 'DOMNotation', 'DOMProcessingInstruction',
+            'DOMText', 'DOMNamedNodeMap', 'DOMImplementation', 'DOMException',
+            'SimpleXMLElement', 'SimpleXMLIterator', 'XMLReader', 'XMLWriter',
+            'XSLTProcessor', 'LibXMLError',
+
+            // SPL classes
+            'SplFileInfo', 'SplFileObject', 'SplTempFileObject',
+            'DirectoryIterator', 'FilesystemIterator', 'RecursiveDirectoryIterator',
+            'GlobIterator', 'RecursiveIteratorIterator', 'RecursiveTreeIterator',
+            'ArrayIterator', 'ArrayObject', 'SplObjectStorage', 'SplDoublyLinkedList',
+            'SplStack', 'SplQueue', 'SplHeap', 'SplMaxHeap', 'SplMinHeap', 'SplPriorityQueue',
+            'SplFixedArray', 'SplObserver', 'SplSubject',
+            'AppendIterator', 'CachingIterator', 'CallbackFilterIterator', 'EmptyIterator',
+            'FilterIterator', 'InfiniteIterator', 'IteratorIterator', 'LimitIterator',
+            'MultipleIterator', 'NoRewindIterator', 'ParentIterator', 'RecursiveCallbackFilterIterator',
+            'RecursiveFilterIterator', 'RecursiveRegexIterator', 'RegexIterator',
+
+            // Reflection classes
             'ReflectionClass', 'ReflectionMethod', 'ReflectionProperty', 'ReflectionFunction',
-            'Closure', 'Generator', 'WeakReference',
+            'ReflectionParameter', 'ReflectionExtension', 'ReflectionObject', 'ReflectionClassConstant',
+            'ReflectionFunctionAbstract', 'ReflectionType', 'ReflectionNamedType', 'ReflectionUnionType',
+            'ReflectionIntersectionType', 'ReflectionGenerator', 'ReflectionReference',
+            'ReflectionZendExtension', 'ReflectionException',
+
+            // Stream and Filter classes
+            'php_user_filter', 'streamWrapper',
+
+            // JSON classes
+            'JsonSerializable', 'JsonException',
+
+            // Other built-in classes
+            'Traversable', 'Iterator', 'IteratorAggregate', 'Throwable', 'Stringable',
+            'Countable', 'Serializable', 'ArrayAccess', 'SeekableIterator',
+            'OuterIterator', 'RecursiveIterator', 'SplObserver', 'SplSubject',
+            '__PHP_Incomplete_Class',
         ];
-        
+
         return in_array($className, $builtinClasses) || class_exists($className, false);
     }
 
     private function initializeWordPressClasses(): void {
         $this->wordpressClasses = [
-            'WP_Query', 'WP_Post', 'WP_User', 'WP_Comment', 'WP_Term', 'WP_Taxonomy',
-            'WP_Error', 'WP_HTTP_Response', 'WP_REST_Response', 'WP_REST_Request',
+            // Core WordPress Query classes
+            'WP_Query', 'WP_User_Query', 'WP_Comment_Query', 'WP_Term_Query', 'WP_Site_Query',
+            'WP_Network_Query', 'WP_Meta_Query', 'WP_Date_Query', 'WP_Tax_Query',
+
+            // Core WordPress object classes
+            'WP_Post', 'WP_User', 'WP_Comment', 'WP_Term', 'WP_Taxonomy', 'WP_Site', 'WP_Network',
+
+            // Error and HTTP classes
+            'WP_Error', 'WP_HTTP', 'WP_HTTP_Response', 'WP_HTTP_Requests_Response',
+            'WP_HTTP_Requests_Hooks', 'WP_HTTP_Cookie', 'WP_HTTP_Encoding',
+
+            // REST API classes
+            'WP_REST_Server', 'WP_REST_Response', 'WP_REST_Request', 'WP_REST_Controller',
+            'WP_REST_Posts_Controller', 'WP_REST_Users_Controller', 'WP_REST_Comments_Controller',
+            'WP_REST_Terms_Controller', 'WP_REST_Attachments_Controller',
+
+            // Admin and UI classes
             'WP_Widget', 'WP_Customize_Manager', 'WP_Customize_Control', 'WP_Customize_Setting',
-            'WP_List_Table', 'WP_Screen', 'WP_Admin_Bar',
-            'wpdb', 'WP_Filesystem_Base', 'WP_Upgrader', 'WP_Ajax_Upgrader_Skin',
-            'WP_Theme', 'WP_Plugin', 'WP_Locale', 'WP_Roles', 'WP_Role',
+            'WP_Customize_Panel', 'WP_Customize_Section', 'WP_List_Table', 'WP_Screen', 'WP_Admin_Bar',
+            'WP_Posts_List_Table', 'WP_Users_List_Table', 'WP_Comments_List_Table',
+
+            // Database and filesystem classes
+            'wpdb', 'WP_Filesystem_Base', 'WP_Filesystem_Direct', 'WP_Filesystem_FTPext',
+            'WP_Filesystem_SSH2', 'WP_Filesystem_ftpsockets',
+
+            // Upgrade and installation classes
+            'WP_Upgrader', 'WP_Ajax_Upgrader_Skin', 'WP_Upgrader_Skin', 'Plugin_Upgrader',
+            'Theme_Upgrader', 'Core_Upgrader', 'Language_Pack_Upgrader', 'Automatic_Upgrader_Skin',
+            'WP_Automatic_Updater',
+
+            // Theme and plugin classes
+            'WP_Theme', 'WP_Plugin', 'WP_Locale', 'WP_Roles', 'WP_Role', 'WP_User_Meta_Session_Tokens',
+
+            // Session and authentication classes
             'WP_Session_Tokens', 'WP_User_Meta_Session_Tokens',
-            'WP_Rewrite', 'WP_Router', 'WP_Hook',
+
+            // Rewrite and routing classes
+            'WP_Rewrite', 'WP_Router', 'WP_Hook', 'WP_Dependency',
+
+            // CLI classes (if WP-CLI is available)
             'WP_CLI', 'WP_CLI_Command',
+
+            // Media and image classes
+            'WP_Image_Editor', 'WP_Image_Editor_GD', 'WP_Image_Editor_Imagick',
+
+            // Cron and background processing
+            'WP_Cron', 'WP_Background_Process',
+
+            // Mail classes
+            'WP_Mail', 'PHPMailer\\PHPMailer\\PHPMailer', 'PHPMailer\\PHPMailer\\SMTP',
+
+            // XML-RPC classes
+            'WP_XML_RPC_Server', 'IXR_Value', 'IXR_Message', 'IXR_Server', 'IXR_IntrospectionServer',
+            'IXR_Request', 'IXR_Client', 'IXR_ClientMulticall', 'IXR_Error', 'IXR_Date', 'IXR_Base64',
+
+            // Feed classes
+            'WP_Feed_Cache', 'WP_Feed_Cache_Transient', 'WP_SimplePie_File', 'WP_SimplePie_Sanitize_KSES',
+
+            // Embed classes
+            'WP_Embed', 'WP_oEmbed', 'WP_oEmbed_Controller',
         ];
     }
 }
