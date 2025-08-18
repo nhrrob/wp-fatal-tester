@@ -4,9 +4,10 @@ namespace NHRROB\WPFatalTester\Detectors;
 use NHRROB\WPFatalTester\Models\FatalError;
 
 class PHPVersionCompatibilityDetector implements ErrorDetectorInterface {
-    
+
     private array $deprecatedFeatures = [];
     private array $removedFeatures = [];
+    private bool $insideScriptTag = false;
     private array $newFeatures = [];
     
     public function __construct() {
@@ -27,7 +28,10 @@ class PHPVersionCompatibilityDetector implements ErrorDetectorInterface {
         $errors = [];
         $content = file_get_contents($filePath);
         $lines = explode("\n", $content);
-        
+
+        // Reset script tag state for each file
+        $this->insideScriptTag = false;
+
         foreach ($lines as $lineNumber => $line) {
             $lineNumber++; // 1-based line numbers
             
@@ -49,7 +53,15 @@ class PHPVersionCompatibilityDetector implements ErrorDetectorInterface {
 
     private function checkDeprecatedFeatures(string $line, string $filePath, int $lineNumber, string $phpVersion): array {
         $errors = [];
-        
+
+        // Update script tag state
+        $this->updateScriptTagState($line);
+
+        // Skip JavaScript code within PHP echo statements
+        if ($this->insideScriptTag || $this->isJavaScriptContext($line)) {
+            return $errors;
+        }
+
         foreach ($this->deprecatedFeatures as $feature => $info) {
             if (preg_match($info['pattern'], $line)) {
                 $deprecatedVersion = $info['deprecated'];
@@ -77,7 +89,15 @@ class PHPVersionCompatibilityDetector implements ErrorDetectorInterface {
 
     private function checkRemovedFeatures(string $line, string $filePath, int $lineNumber, string $phpVersion): array {
         $errors = [];
-        
+
+        // Update script tag state
+        $this->updateScriptTagState($line);
+
+        // Skip JavaScript code within PHP echo statements
+        if ($this->insideScriptTag || $this->isJavaScriptContext($line)) {
+            return $errors;
+        }
+
         foreach ($this->removedFeatures as $feature => $info) {
             if (preg_match($info['pattern'], $line)) {
                 $removedVersion = $info['removed'];
@@ -211,7 +231,7 @@ class PHPVersionCompatibilityDetector implements ErrorDetectorInterface {
     private function initializeDeprecatedFeatures(): void {
         $this->deprecatedFeatures = [
             'each() function' => [
-                'pattern' => '/\beach\s*\(/',
+                'pattern' => '/(?<![.$])\beach\s*\(/',
                 'deprecated' => '7.2.0',
                 'suggestion' => 'Use foreach loop instead'
             ],
@@ -251,7 +271,7 @@ class PHPVersionCompatibilityDetector implements ErrorDetectorInterface {
                 'suggestion' => 'Use openssl or sodium extension instead'
             ],
             'each() function' => [
-                'pattern' => '/\beach\s*\(/',
+                'pattern' => '/(?<![.$])\beach\s*\(/',
                 'removed' => '8.0.0',
                 'suggestion' => 'Use foreach loop instead'
             ],
@@ -336,5 +356,27 @@ class PHPVersionCompatibilityDetector implements ErrorDetectorInterface {
                 'since' => '8.1.0'
             ],
         ];
+    }
+
+    private function updateScriptTagState(string $line): void {
+        // Check if we're entering a script tag (including within echo statements)
+        if (preg_match('/<script[^>]*>/', $line)) {
+            $this->insideScriptTag = true;
+        }
+
+        // Check if we're exiting a script tag (including within echo statements)
+        if (preg_match('/<\/script>/', $line)) {
+            $this->insideScriptTag = false;
+        }
+    }
+
+    private function isJavaScriptContext(string $line): bool {
+        // Check for JavaScript patterns within PHP echo statements
+        return preg_match('/\$\s*\(\s*["\']/', $line) ||
+               preg_match('/jQuery\s*\(/', $line) ||
+               preg_match('/<script[^>]*>/', $line) ||
+               preg_match('/echo\s+["\']<script/', $line) ||
+               preg_match('/\$\(["\'][^"\']*["\']/', $line) ||
+               preg_match('/\.each\s*\(/', $line);
     }
 }

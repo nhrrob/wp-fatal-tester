@@ -2,14 +2,27 @@
 namespace NHRROB\WPFatalTester\Detectors;
 
 use NHRROB\WPFatalTester\Models\FatalError;
+use NHRROB\WPFatalTester\Exceptions\DependencyExceptionManager;
 
 class ClassConflictDetector implements ErrorDetectorInterface {
-    
+
     private array $declaredClasses = [];
     private array $wordpressClasses = [];
-    
-    public function __construct() {
+    private DependencyExceptionManager $exceptionManager;
+    private array $detectedEcosystems = [];
+
+    public function __construct(?DependencyExceptionManager $exceptionManager = null) {
+        $this->exceptionManager = $exceptionManager ?? new DependencyExceptionManager();
         $this->initializeWordPressClasses();
+    }
+
+    /**
+     * Set detected ecosystems for dependency exception handling
+     *
+     * @param array $ecosystems
+     */
+    public function setDetectedEcosystems(array $ecosystems): void {
+        $this->detectedEcosystems = $ecosystems;
     }
     
     public function getName(): string {
@@ -50,14 +63,32 @@ class ClassConflictDetector implements ErrorDetectorInterface {
             $classUsages = $this->extractClassUsages($line);
             foreach ($classUsages as $className) {
                 if ($this->isUndefinedClass($className)) {
+                    $exceptionReason = $this->exceptionManager->getClassExceptionReason($className, $this->detectedEcosystems);
+
+                    if ($exceptionReason) {
+                        // This class is excepted, but we can provide a helpful note
+                        continue;
+                    }
+
+                    $suggestion = "Ensure class '{$className}' is defined or properly included";
+
+                    // Provide ecosystem-specific suggestions
+                    if (!empty($this->detectedEcosystems)) {
+                        $ecosystemList = implode(', ', $this->detectedEcosystems);
+                        $suggestion .= ". If this class is provided by {$ecosystemList}, ensure the parent plugin is installed and active.";
+                    }
+
                     $errors[] = new FatalError(
                         type: 'UNDEFINED_CLASS',
                         message: "Class '{$className}' not found",
                         file: $filePath,
                         line: $lineNumber,
                         severity: 'error',
-                        suggestion: "Ensure class '{$className}' is defined or properly included",
-                        context: ['class' => $className]
+                        suggestion: $suggestion,
+                        context: [
+                            'class' => $className,
+                            'detected_ecosystems' => $this->detectedEcosystems
+                        ]
                     );
                 }
             }
@@ -190,26 +221,31 @@ class ClassConflictDetector implements ErrorDetectorInterface {
 
     private function isUndefinedClass(string $className): bool {
         // Skip built-in PHP classes and common keywords
-        if ($this->isPHPBuiltinClass($className) || 
+        if ($this->isPHPBuiltinClass($className) ||
             in_array(strtolower($className), ['self', 'parent', 'static'])) {
             return false;
         }
-        
+
         // Skip WordPress core classes
         if (in_array($className, $this->wordpressClasses)) {
             return false;
         }
-        
+
         // Skip if class exists
         if (class_exists($className, false) || interface_exists($className, false) || trait_exists($className, false)) {
             return false;
         }
-        
+
         // Skip if it's in our declared classes list
         if (in_array($className, $this->declaredClasses)) {
             return false;
         }
-        
+
+        // Check dependency exceptions based on detected ecosystems
+        if ($this->exceptionManager->isClassExcepted($className, $this->detectedEcosystems)) {
+            return false;
+        }
+
         return true;
     }
 

@@ -20,6 +20,9 @@ class ArgumentParser {
             'help' => false,
             'verbose' => false,
             'no_colors' => false,
+            'disable_ecosystem_detection' => false,
+            'force_ecosystem' => null,
+            'ignore_dependency_errors' => false,
         ];
     }
     
@@ -109,6 +112,22 @@ class ArgumentParser {
             case '--no-colors':
                 $this->options['no_colors'] = true;
                 break;
+
+            case '--disable-ecosystem-detection':
+                $this->options['disable_ecosystem_detection'] = true;
+                break;
+
+            case '--force-ecosystem':
+                if (isset($this->arguments[$index + 1])) {
+                    $ecosystems = explode(',', $this->arguments[$index + 1]);
+                    $this->options['force_ecosystem'] = array_map('trim', $ecosystems);
+                    return $index + 1;
+                }
+                break;
+
+            case '--ignore-dependency-errors':
+                $this->options['ignore_dependency_errors'] = true;
+                break;
         }
         
         return $index;
@@ -135,6 +154,11 @@ OPTIONS:
     --no-colors         Disable colored output
     --help, -h          Show this help message
 
+ECOSYSTEM OPTIONS:
+    --disable-ecosystem-detection    Disable automatic plugin ecosystem detection
+    --force-ecosystem ECOSYSTEMS     Force specific ecosystems (elementor,woocommerce)
+    --ignore-dependency-errors       Ignore all dependency-related errors
+
 EXAMPLES:
     fataltest                           # Test current directory, fatal errors only
     fataltest my-plugin                 # Test specific plugin, fatal errors only
@@ -142,6 +166,9 @@ EXAMPLES:
     fataltest --severity error,warning  # Explicitly set severity levels
     fataltest --php 8.0,8.1,8.2        # Test against specific PHP versions
     fataltest --wp 6.4,6.5,6.6         # Test against specific WordPress versions
+    fataltest --force-ecosystem elementor  # Force Elementor ecosystem detection
+    fataltest --disable-ecosystem-detection  # Disable ecosystem detection
+    fataltest --ignore-dependency-errors     # Ignore dependency-related errors
 
 SEVERITY LEVELS:
     error    Fatal errors that will break plugin functionality

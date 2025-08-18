@@ -7,6 +7,8 @@ use NHRROB\WPFatalTester\Detectors\UndefinedFunctionDetector;
 use NHRROB\WPFatalTester\Detectors\ClassConflictDetector;
 use NHRROB\WPFatalTester\Detectors\WordPressCompatibilityDetector;
 use NHRROB\WPFatalTester\Detectors\PHPVersionCompatibilityDetector;
+use NHRROB\WPFatalTester\Detectors\PluginEcosystemDetector;
+use NHRROB\WPFatalTester\Exceptions\DependencyExceptionManager;
 use NHRROB\WPFatalTester\Scanner\FileScanner;
 use NHRROB\WPFatalTester\Reporter\ErrorReporter;
 
@@ -15,11 +17,15 @@ class FatalTester {
     private FileScanner $scanner;
     private ErrorReporter $reporter;
     private array $severityFilter = ['error']; // Default to fatal errors only
+    private PluginEcosystemDetector $ecosystemDetector;
+    private DependencyExceptionManager $exceptionManager;
 
     public function __construct(array $severityFilter = ['error'], bool $useColors = true) {
         $this->severityFilter = $severityFilter;
         $this->scanner = new FileScanner();
         $this->reporter = new ErrorReporter($useColors);
+        $this->ecosystemDetector = new PluginEcosystemDetector();
+        $this->exceptionManager = new DependencyExceptionManager();
         $this->initializeDetectors();
     }
 
@@ -27,7 +33,7 @@ class FatalTester {
         $this->detectors = [
             new SyntaxErrorDetector(),
             new UndefinedFunctionDetector(),
-            new ClassConflictDetector(),
+            new ClassConflictDetector($this->exceptionManager),
             new WordPressCompatibilityDetector(),
             new PHPVersionCompatibilityDetector(),
         ];
@@ -38,6 +44,13 @@ class FatalTester {
         echo "   PHP versions: " . implode(', ', $options['php']) . "\n";
         echo "   WP versions: " . implode(', ', $options['wp']) . "\n";
         echo "   Plugin path: " . $this->getPluginPath($options['plugin']) . "\n";
+
+        // Detect and display ecosystems
+        $pluginPath = $this->getPluginPath($options['plugin']);
+        $detectedEcosystems = $this->ecosystemDetector->detectEcosystems($pluginPath);
+        if (!empty($detectedEcosystems)) {
+            echo "   Detected ecosystems: " . implode(', ', $detectedEcosystems) . "\n";
+        }
 
         // Display filtering information
         if (count($this->severityFilter) === 1 && $this->severityFilter[0] === 'error') {
@@ -64,7 +77,7 @@ class FatalTester {
                 $currentTest++;
                 echo "▶️ Testing {$options['plugin']} on PHP {$php}, WP {$wp} ({$currentTest}/{$totalTests})...\n";
 
-                $errors = $this->testPluginCompatibility($pluginPath, $php, $wp);
+                $errors = $this->testPluginCompatibility($pluginPath, $php, $wp, $options);
                 $filteredErrors = $this->filterErrorsBySeverity($errors);
 
                 if (!empty($filteredErrors)) {
@@ -122,15 +135,41 @@ class FatalTester {
         return is_dir($path) && is_readable($path);
     }
 
-    private function testPluginCompatibility(string $pluginPath, string $phpVersion, string $wpVersion): array {
+    private function testPluginCompatibility(string $pluginPath, string $phpVersion, string $wpVersion, array $options = []): array {
         $files = $this->scanner->scanDirectory($pluginPath);
         $allErrors = [];
+
+        // Detect plugin ecosystems (unless disabled)
+        $detectedEcosystems = [];
+        if (!($options['disable_ecosystem_detection'] ?? false)) {
+            $detectedEcosystems = $this->ecosystemDetector->detectEcosystems($pluginPath);
+        }
+
+        // Override with forced ecosystems if specified
+        if (!empty($options['force_ecosystem'])) {
+            $detectedEcosystems = $options['force_ecosystem'];
+        }
+
+        // Pass ecosystem information to detectors that support it
+        foreach ($this->detectors as $detector) {
+            if ($detector instanceof ClassConflictDetector) {
+                $detector->setDetectedEcosystems($detectedEcosystems);
+            }
+        }
 
         foreach ($files as $file) {
             foreach ($this->detectors as $detector) {
                 $errors = $detector->detect($file, $phpVersion, $wpVersion);
                 $allErrors = array_merge($allErrors, $errors);
             }
+        }
+
+        // Filter out dependency errors if requested
+        if ($options['ignore_dependency_errors'] ?? false) {
+            $allErrors = array_filter($allErrors, function($error) use ($detectedEcosystems) {
+                return $error->type !== 'UNDEFINED_CLASS' ||
+                       !$this->exceptionManager->isClassExcepted($error->context['class'] ?? '', $detectedEcosystems);
+            });
         }
 
         return $allErrors;

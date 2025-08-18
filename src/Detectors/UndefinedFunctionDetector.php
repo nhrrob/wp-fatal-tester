@@ -4,9 +4,10 @@ namespace NHRROB\WPFatalTester\Detectors;
 use NHRROB\WPFatalTester\Models\FatalError;
 
 class UndefinedFunctionDetector implements ErrorDetectorInterface {
-    
+
     private array $wordpressFunctions = [];
     private array $phpFunctions = [];
+    private bool $insideScriptTag = false;
     
     public function __construct() {
         $this->initializeWordPressFunctions();
@@ -25,10 +26,16 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
         $errors = [];
         $content = file_get_contents($filePath);
         $lines = explode("\n", $content);
-        
+
+        // Reset script tag state for each file
+        $this->insideScriptTag = false;
+
         foreach ($lines as $lineNumber => $line) {
             $lineNumber++; // 1-based line numbers
-            
+
+            // Update script tag state
+            $this->updateScriptTagState($line);
+
             // Find function calls in the line
             $functionCalls = $this->extractFunctionCalls($line);
             
@@ -53,12 +60,26 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
     private function extractFunctionCalls(string $line): array {
         $functions = [];
 
+        // Skip if we're inside a script tag
+        if ($this->insideScriptTag) {
+            return [];
+        }
+
         // Remove comments
         $line = preg_replace('/\/\/.*$/', '', $line);
         $line = preg_replace('/\/\*.*?\*\//', '', $line);
 
-        // Skip method calls (contains -> or ::)
+        // Skip method calls (contains -> or ::) and JavaScript method calls (contains .)
         if (strpos($line, '->') !== false || strpos($line, '::') !== false) {
+            return [];
+        }
+
+        // Skip JavaScript code (enhanced detection)
+        if (preg_match('/\$\s*\(\s*["\']/', $line) ||
+            preg_match('/jQuery\s*\(/', $line) ||
+            preg_match('/<script[^>]*>/', $line) ||
+            preg_match('/echo\s+["\']<script/', $line) ||
+            preg_match('/\$\(["\'][^"\']*["\']/', $line)) {
             return [];
         }
 
@@ -72,8 +93,8 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
             return [];
         }
 
-        // Match function calls: function_name(
-        if (preg_match_all('/([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/', $line, $matches)) {
+        // Match function calls: function_name( but exclude JavaScript method calls like .method(
+        if (preg_match_all('/(?<![.$])\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/', $line, $matches)) {
             foreach ($matches[1] as $match) {
                 // Skip language constructs and common keywords
                 if (!in_array(strtolower($match), [
@@ -201,5 +222,17 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
             'intdiv' => '7.0.0',
             'preg_replace_callback_array' => '7.0.0',
         ];
+    }
+
+    private function updateScriptTagState(string $line): void {
+        // Check if we're entering a script tag (including within echo statements)
+        if (preg_match('/<script[^>]*>/', $line)) {
+            $this->insideScriptTag = true;
+        }
+
+        // Check if we're exiting a script tag (including within echo statements)
+        if (preg_match('/<\/script>/', $line)) {
+            $this->insideScriptTag = false;
+        }
     }
 }
