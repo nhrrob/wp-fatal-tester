@@ -183,39 +183,66 @@ class ClassConflictDetector implements ErrorDetectorInterface {
 
     private function extractClassUsages(string $line): array {
         $classes = [];
-        
+
         // Remove comments
         $line = preg_replace('/\/\/.*$/', '', $line);
         $line = preg_replace('/\/\*.*?\*\//', '', $line);
-        
-        // Match new ClassName()
-        if (preg_match_all('/new\s+([a-zA-Z_][a-zA-Z0-9_\\\\]*)\s*\(/', $line, $matches)) {
+
+        // Skip lines that are likely HTML/CSS (contain quotes with class attributes)
+        if (preg_match('/["\'].*class\s*=.*["\']/', $line) ||
+            preg_match('/["\'].*["\']/', $line) && preg_match('/\.(css|html|js)/', $line)) {
+            return [];
+        }
+
+        // Skip lines that look like CSS selectors or HTML
+        if (preg_match('/^\s*[\.\#]/', $line) ||
+            preg_match('/<[^>]+>/', $line) ||
+            preg_match('/\{[^}]*\}/', $line)) {
+            return [];
+        }
+
+        // Match new ClassName() - but not in strings
+        if (preg_match_all('/(?<!["\'])new\s+([A-Z][a-zA-Z0-9_\\\\]*)\s*\(/', $line, $matches)) {
             $classes = array_merge($classes, $matches[1]);
         }
-        
-        // Match ClassName::method()
-        if (preg_match_all('/([a-zA-Z_][a-zA-Z0-9_\\\\]*)::[a-zA-Z_][a-zA-Z0-9_]*/', $line, $matches)) {
+
+        // Match ClassName::method() - but not in strings
+        if (preg_match_all('/(?<!["\'])([A-Z][a-zA-Z0-9_\\\\]*)::[a-zA-Z_][a-zA-Z0-9_]*/', $line, $matches)) {
             $classes = array_merge($classes, $matches[1]);
         }
-        
+
         // Match instanceof ClassName
-        if (preg_match_all('/instanceof\s+([a-zA-Z_][a-zA-Z0-9_\\\\]*)/', $line, $matches)) {
+        if (preg_match_all('/instanceof\s+([A-Z][a-zA-Z0-9_\\\\]*)/', $line, $matches)) {
             $classes = array_merge($classes, $matches[1]);
         }
-        
+
         // Match extends ClassName
-        if (preg_match_all('/extends\s+([a-zA-Z_][a-zA-Z0-9_\\\\]*)/', $line, $matches)) {
+        if (preg_match_all('/extends\s+([A-Z][a-zA-Z0-9_\\\\]*)/', $line, $matches)) {
             $classes = array_merge($classes, $matches[1]);
         }
-        
+
         // Match implements ClassName
-        if (preg_match_all('/implements\s+([a-zA-Z_][a-zA-Z0-9_\\\\]*(?:\s*,\s*[a-zA-Z_][a-zA-Z0-9_\\\\]*)*)/', $line, $matches)) {
+        if (preg_match_all('/implements\s+([A-Z][a-zA-Z0-9_\\\\]*(?:\s*,\s*[A-Z][a-zA-Z0-9_\\\\]*)*)/', $line, $matches)) {
             foreach ($matches[1] as $implementsList) {
                 $interfaces = preg_split('/\s*,\s*/', $implementsList);
                 $classes = array_merge($classes, $interfaces);
             }
         }
-        
+
+        // Filter out obvious non-class names
+        $classes = array_filter($classes, function($className) {
+            // Skip single lowercase words (likely CSS classes)
+            if (ctype_lower($className) && strlen($className) < 10) {
+                return false;
+            }
+            // Skip common HTML/CSS terms
+            $cssTerms = ['hover', 'active', 'focus', 'disabled', 'hidden', 'visible', 'block', 'inline', 'flex'];
+            if (in_array(strtolower($className), $cssTerms)) {
+                return false;
+            }
+            return true;
+        });
+
         return array_unique(array_filter($classes));
     }
 

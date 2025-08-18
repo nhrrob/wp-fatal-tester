@@ -32,7 +32,7 @@ class FatalTester {
     private function initializeDetectors(): void {
         $this->detectors = [
             new SyntaxErrorDetector(),
-            new UndefinedFunctionDetector(),
+            new UndefinedFunctionDetector($this->exceptionManager),
             new ClassConflictDetector($this->exceptionManager),
             new WordPressCompatibilityDetector(),
             new PHPVersionCompatibilityDetector(),
@@ -153,6 +153,9 @@ class FatalTester {
         // Pass ecosystem information to detectors that support it
         foreach ($this->detectors as $detector) {
             if ($detector instanceof ClassConflictDetector) {
+                $detector->setDetectedEcosystems($detectedEcosystems);
+            }
+            if ($detector instanceof UndefinedFunctionDetector) {
                 $detector->setDetectedEcosystems($detectedEcosystems);
             }
         }

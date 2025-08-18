@@ -2,16 +2,29 @@
 namespace NHRROB\WPFatalTester\Detectors;
 
 use NHRROB\WPFatalTester\Models\FatalError;
+use NHRROB\WPFatalTester\Exceptions\DependencyExceptionManager;
 
 class UndefinedFunctionDetector implements ErrorDetectorInterface {
 
     private array $wordpressFunctions = [];
     private array $phpFunctions = [];
     private bool $insideScriptTag = false;
-    
-    public function __construct() {
+    private DependencyExceptionManager $exceptionManager;
+    private array $detectedEcosystems = [];
+
+    public function __construct(?DependencyExceptionManager $exceptionManager = null) {
+        $this->exceptionManager = $exceptionManager ?? new DependencyExceptionManager();
         $this->initializeWordPressFunctions();
         $this->initializePHPFunctions();
+    }
+
+    /**
+     * Set detected ecosystems for dependency exception handling
+     *
+     * @param array $ecosystems
+     */
+    public function setDetectedEcosystems(array $ecosystems): void {
+        $this->detectedEcosystems = $ecosystems;
     }
     
     public function getName(): string {
@@ -83,6 +96,14 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
             return [];
         }
 
+        // Skip CSS code (enhanced detection)
+        if (preg_match('/\{[^}]*\}/', $line) ||
+            preg_match('/:\s*(calc|rgba|rgb|hsl|hsla|linear-gradient|radial-gradient)\s*\(/', $line) ||
+            preg_match('/["\'].*\.(css|scss|sass|less).*["\']/', $line) ||
+            preg_match('/style\s*=\s*["\']/', $line)) {
+            return [];
+        }
+
         // Skip lines that are method definitions
         if (preg_match('/^\s*(private|protected|public)\s+function\s+/', $line)) {
             return [];
@@ -117,23 +138,28 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
         if (function_exists($functionName)) {
             return false;
         }
-        
+
         // Check if it's a known WordPress function
         if (in_array($functionName, $this->wordpressFunctions)) {
             return false;
         }
-        
+
+        // Check dependency exceptions based on detected ecosystems
+        if ($this->exceptionManager->isFunctionExcepted($functionName, $this->detectedEcosystems)) {
+            return false;
+        }
+
         // Check if it's a PHP function that might not be available in the target version
         if (isset($this->phpFunctions[$functionName])) {
             $requiredVersion = $this->phpFunctions[$functionName];
             return version_compare($phpVersion, $requiredVersion, '<');
         }
-        
+
         // Check for common WordPress functions that might be missing
         if ($this->isWordPressFunction($functionName)) {
             return false;
         }
-        
+
         // If we can't determine, assume it might be undefined
         return true;
     }
