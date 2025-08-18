@@ -70,9 +70,24 @@ class ErrorReporter {
     public function displaySummaryReport(array $allErrors, array $options): void {
         echo $this->colorize("\n📊 DETAILED SUMMARY REPORT", 'bold') . "\n";
         echo $this->colorize(str_repeat('=', 50), 'dim') . "\n\n";
-        
+
+        // Display filtering information
+        if (isset($options['severity_filter'])) {
+            $severityFilter = $options['severity_filter'];
+            if (count($severityFilter) === 1 && $severityFilter[0] === 'error') {
+                echo $this->colorize("🔍 Filter: Showing fatal errors only (use --show-all-errors to see warnings)", 'blue') . "\n\n";
+            } elseif (count($severityFilter) < 2) {
+                echo $this->colorize("🔍 Filter: Showing severity levels: " . implode(', ', $severityFilter), 'blue') . "\n\n";
+            } else {
+                echo $this->colorize("🔍 Filter: Showing all error types", 'blue') . "\n\n";
+            }
+        }
+
         if (empty($allErrors)) {
-            echo $this->colorize("✅ Excellent! No fatal errors detected.", 'green') . "\n";
+            $filterText = isset($options['severity_filter']) && count($options['severity_filter']) === 1 && $options['severity_filter'][0] === 'error'
+                ? "No fatal errors detected"
+                : "No errors detected";
+            echo $this->colorize("✅ Excellent! {$filterText}.", 'green') . "\n";
             echo "   Plugin: " . $this->colorize($options['plugin'], 'bold') . "\n";
             echo "   PHP versions tested: " . $this->colorize(implode(', ', $options['php']), 'cyan') . "\n";
             echo "   WordPress versions tested: " . $this->colorize(implode(', ', $options['wp']), 'cyan') . "\n";
@@ -101,7 +116,10 @@ class ErrorReporter {
             }
         }
 
-        echo $this->colorize("❌ Fatal errors detected: {$totalErrors} total", 'red') . "\n\n";
+        $errorTypeText = isset($options['severity_filter']) && count($options['severity_filter']) === 1 && $options['severity_filter'][0] === 'error'
+            ? "Fatal errors"
+            : "Errors";
+        echo $this->colorize("❌ {$errorTypeText} detected: {$totalErrors} total", 'red') . "\n\n";
         
         echo $this->colorize("📈 Error Breakdown by Severity:", 'bold') . "\n";
         echo "   🔴 Errors: " . $this->colorize($errorsBySeverity['error'], 'red') . "\n";

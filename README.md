@@ -35,21 +35,54 @@ composer require --dev nhrrob/wp-fatal-tester
 
 ### Basic Usage
 
-Test the current directory (auto-detects plugin name):
+Test the current directory (auto-detects plugin name, shows fatal errors only):
 ```bash
 php vendor/bin/fataltest
 ```
 
-Test a specific plugin:
+Test a specific plugin (shows fatal errors only):
 ```bash
 php vendor/bin/fataltest my-plugin
+```
+
+Show all errors including warnings:
+```bash
+php vendor/bin/fataltest --show-all-errors
+```
+
+### Command Line Options
+
+```bash
+# Show help
+php vendor/bin/fataltest --help
+
+# Test with all error types (including warnings)
+php vendor/bin/fataltest my-plugin --show-all-errors
+
+# Test specific PHP and WordPress versions
+php vendor/bin/fataltest my-plugin --php 8.0,8.1,8.2 --wp 6.4,6.5,6.6
+
+# Custom severity filtering
+php vendor/bin/fataltest my-plugin --severity error,warning
+
+# Disable colored output
+php vendor/bin/fataltest my-plugin --no-colors
 ```
 
 ### What It Tests
 
 The tool automatically tests your code against:
-- **PHP Versions**: 8.1, 8.2 (configurable)
-- **WordPress Versions**: 6.5, 6.6 (configurable)
+- **PHP Versions**: 8.1, 8.2 (configurable via `--php` option)
+- **WordPress Versions**: 6.5, 6.6 (configurable via `--wp` option)
+
+### Default Behavior
+
+**By default, the tool now shows only fatal errors** to focus on critical issues that will break plugin functionality. This change was made because showing all 71,000+ errors (including warnings) was overwhelming.
+
+- **Fatal errors** (severity: `error`) are issues that will prevent your plugin from working
+- **Warnings** (severity: `warning`) are about deprecated features or potential future issues
+
+Use `--show-all-errors` to see warnings and other non-fatal issues when needed.
 
 ### Example Output
 
@@ -58,24 +91,23 @@ The tool automatically tests your code against:
    PHP versions: 8.1, 8.2
    WP versions: 6.5, 6.6
    Plugin path: /path/to/my-awesome-plugin
+   Filter: Fatal errors only (use --show-all-errors to see warnings)
 
 ▶️ Testing my-awesome-plugin on PHP 8.1, WP 6.5 (1/4)...
-❌ Found 3 error(s) on PHP 8.1, WP 6.5
+❌ Found 2 error(s) on PHP 8.1, WP 6.5 (3 total, filtered by severity)
 
 📋 SYNTAX_ERROR (1 error(s)):
 🔴 syntax error, unexpected identifier "create_function"
   Location: plugin.php:25
   💡 Suggestion: Fix the syntax error in the specified line
 
-📋 DEPRECATED_PHP_FEATURE (1 error(s)):
-🟡 create_function() is deprecated since PHP 7.2.0
-  Location: plugin.php:25
-  💡 Suggestion: Use anonymous functions instead
-
 📋 REMOVED_PHP_FEATURE (1 error(s)):
 🔴 create_function() was removed in PHP 8.0.0
   Location: plugin.php:25
   💡 Suggestion: Use anonymous functions instead
+
+# Note: DEPRECATED_PHP_FEATURE warnings are filtered out by default
+# Use --show-all-errors to see them
 ```
 
 ## Error Types Detected

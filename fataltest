@@ -36,13 +36,21 @@ if (isset($GLOBALS['_composer_autoload_path'])) {
 }
 
 use NHRROB\WPFatalTester\FatalTester;
+use NHRROB\WPFatalTester\CLI\ArgumentParser;
 
-// Auto-detect plugin folder if no argument is given
-$plugin = $argv[1] ?? basename(getcwd());
+// Parse command-line arguments
+$parser = new ArgumentParser();
+$options = $parser->parse($argv);
 
-$tester = new FatalTester();
-$tester->run([
-    'plugin' => $plugin,
-    'php' => ['8.1', '8.2'],
-    'wp' => ['6.5', '6.6']
-]);
+// Show help if requested
+if ($options['help']) {
+    echo $parser->getHelpText();
+    exit(0);
+}
+
+// Create tester with appropriate settings
+$useColors = !$options['no_colors'];
+$tester = new FatalTester($options['severity_filter'], $useColors);
+
+// Run the test
+$tester->run($options);

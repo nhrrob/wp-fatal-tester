@@ -14,10 +14,12 @@ class FatalTester {
     private array $detectors = [];
     private FileScanner $scanner;
     private ErrorReporter $reporter;
+    private array $severityFilter = ['error']; // Default to fatal errors only
 
-    public function __construct() {
+    public function __construct(array $severityFilter = ['error'], bool $useColors = true) {
+        $this->severityFilter = $severityFilter;
         $this->scanner = new FileScanner();
-        $this->reporter = new ErrorReporter();
+        $this->reporter = new ErrorReporter($useColors);
         $this->initializeDetectors();
     }
 
@@ -35,7 +37,17 @@ class FatalTester {
         echo "🚀 Running fatal test for plugin: {$options['plugin']}\n";
         echo "   PHP versions: " . implode(', ', $options['php']) . "\n";
         echo "   WP versions: " . implode(', ', $options['wp']) . "\n";
-        echo "   Plugin path: " . $this->getPluginPath($options['plugin']) . "\n\n";
+        echo "   Plugin path: " . $this->getPluginPath($options['plugin']) . "\n";
+
+        // Display filtering information
+        if (count($this->severityFilter) === 1 && $this->severityFilter[0] === 'error') {
+            echo "   Filter: Fatal errors only (use --show-all-errors to see warnings)\n";
+        } elseif (count($this->severityFilter) < 2) {
+            echo "   Filter: Severity levels: " . implode(', ', $this->severityFilter) . "\n";
+        } else {
+            echo "   Filter: All error types\n";
+        }
+        echo "\n";
 
         $pluginPath = $this->getPluginPath($options['plugin']);
         if (!$this->validatePluginPath($pluginPath)) {
@@ -53,13 +65,27 @@ class FatalTester {
                 echo "▶️ Testing {$options['plugin']} on PHP {$php}, WP {$wp} ({$currentTest}/{$totalTests})...\n";
 
                 $errors = $this->testPluginCompatibility($pluginPath, $php, $wp);
+                $filteredErrors = $this->filterErrorsBySeverity($errors);
 
-                if (!empty($errors)) {
-                    echo "❌ Found " . count($errors) . " error(s) on PHP {$php}, WP {$wp}\n";
-                    $allErrors["{$php}-{$wp}"] = $errors;
-                    $this->reporter->displayErrors($errors, $php, $wp);
+                if (!empty($filteredErrors)) {
+                    $totalErrors = count($errors);
+                    $filteredCount = count($filteredErrors);
+
+                    if ($totalErrors === $filteredCount) {
+                        echo "❌ Found {$filteredCount} error(s) on PHP {$php}, WP {$wp}\n";
+                    } else {
+                        echo "❌ Found {$filteredCount} error(s) on PHP {$php}, WP {$wp} ({$totalErrors} total, filtered by severity)\n";
+                    }
+
+                    $allErrors["{$php}-{$wp}"] = $filteredErrors;
+                    $this->reporter->displayErrors($filteredErrors, $php, $wp);
                 } else {
-                    echo "✅ Passed on PHP {$php}, WP {$wp}\n";
+                    $totalErrors = count($errors);
+                    if ($totalErrors > 0) {
+                        echo "✅ Passed on PHP {$php}, WP {$wp} (no errors matching severity filter, {$totalErrors} total errors filtered out)\n";
+                    } else {
+                        echo "✅ Passed on PHP {$php}, WP {$wp}\n";
+                    }
                 }
                 echo "\n";
             }
@@ -111,6 +137,42 @@ class FatalTester {
     }
 
     private function displaySummary(array $allErrors, array $options): void {
+        // Add severity filter info to options for the summary report
+        $options['severity_filter'] = $this->severityFilter;
         $this->reporter->displaySummaryReport($allErrors, $options);
+    }
+
+    /**
+     * Filter errors by severity level
+     *
+     * @param array $errors Array of FatalError objects
+     * @return array Filtered array of FatalError objects
+     */
+    private function filterErrorsBySeverity(array $errors): array {
+        if (empty($this->severityFilter)) {
+            return $errors;
+        }
+
+        return array_filter($errors, function($error) {
+            return in_array($error->severity, $this->severityFilter);
+        });
+    }
+
+    /**
+     * Set the severity filter
+     *
+     * @param array $severityFilter Array of severity levels to include
+     */
+    public function setSeverityFilter(array $severityFilter): void {
+        $this->severityFilter = $severityFilter;
+    }
+
+    /**
+     * Get the current severity filter
+     *
+     * @return array Current severity filter
+     */
+    public function getSeverityFilter(): array {
+        return $this->severityFilter;
     }
 }
