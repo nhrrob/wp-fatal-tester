@@ -2,15 +2,29 @@
 namespace NHRROB\WPFatalTester\Detectors;
 
 use NHRROB\WPFatalTester\Models\FatalError;
+use NHRROB\WPFatalTester\Exceptions\DependencyExceptionManager;
 
 class UndefinedFunctionDetector implements ErrorDetectorInterface {
-    
+
     private array $wordpressFunctions = [];
     private array $phpFunctions = [];
-    
-    public function __construct() {
+    private bool $insideScriptTag = false;
+    private DependencyExceptionManager $exceptionManager;
+    private array $detectedEcosystems = [];
+
+    public function __construct(?DependencyExceptionManager $exceptionManager = null) {
+        $this->exceptionManager = $exceptionManager ?? new DependencyExceptionManager();
         $this->initializeWordPressFunctions();
         $this->initializePHPFunctions();
+    }
+
+    /**
+     * Set detected ecosystems for dependency exception handling
+     *
+     * @param array $ecosystems
+     */
+    public function setDetectedEcosystems(array $ecosystems): void {
+        $this->detectedEcosystems = $ecosystems;
     }
     
     public function getName(): string {
@@ -25,10 +39,16 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
         $errors = [];
         $content = file_get_contents($filePath);
         $lines = explode("\n", $content);
-        
+
+        // Reset script tag state for each file
+        $this->insideScriptTag = false;
+
         foreach ($lines as $lineNumber => $line) {
             $lineNumber++; // 1-based line numbers
-            
+
+            // Update script tag state
+            $this->updateScriptTagState($line);
+
             // Find function calls in the line
             $functionCalls = $this->extractFunctionCalls($line);
             
@@ -53,12 +73,34 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
     private function extractFunctionCalls(string $line): array {
         $functions = [];
 
+        // Skip if we're inside a script tag
+        if ($this->insideScriptTag) {
+            return [];
+        }
+
         // Remove comments
         $line = preg_replace('/\/\/.*$/', '', $line);
         $line = preg_replace('/\/\*.*?\*\//', '', $line);
 
-        // Skip method calls (contains -> or ::)
+        // Skip method calls (contains -> or ::) and JavaScript method calls (contains .)
         if (strpos($line, '->') !== false || strpos($line, '::') !== false) {
+            return [];
+        }
+
+        // Skip JavaScript code (enhanced detection)
+        if (preg_match('/\$\s*\(\s*["\']/', $line) ||
+            preg_match('/jQuery\s*\(/', $line) ||
+            preg_match('/<script[^>]*>/', $line) ||
+            preg_match('/echo\s+["\']<script/', $line) ||
+            preg_match('/\$\(["\'][^"\']*["\']/', $line)) {
+            return [];
+        }
+
+        // Skip CSS code (enhanced detection)
+        if (preg_match('/\{[^}]*\}/', $line) ||
+            preg_match('/:\s*(calc|rgba|rgb|hsl|hsla|linear-gradient|radial-gradient)\s*\(/', $line) ||
+            preg_match('/["\'].*\.(css|scss|sass|less).*["\']/', $line) ||
+            preg_match('/style\s*=\s*["\']/', $line)) {
             return [];
         }
 
@@ -72,19 +114,56 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
             return [];
         }
 
-        // Match function calls: function_name(
-        if (preg_match_all('/([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/', $line, $matches)) {
+        // Skip lines with class instantiations, exception handling, and type declarations
+        if (preg_match('/\bnew\s+\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*\s*\(/', $line) ||
+            preg_match('/\bcatch\s*\(\s*\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*\s/', $line) ||
+            preg_match('/\bthrow\s+new\s+\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*\s*\(/', $line) ||
+            preg_match('/\bextends\s+\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*/', $line) ||
+            preg_match('/\bimplements\s+\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*/', $line) ||
+            preg_match('/\binstanceof\s+\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*/', $line)) {
+            return [];
+        }
+
+        // Match function calls: function_name( but exclude JavaScript method calls like .method(
+        // Also exclude class instantiations with namespaces like new \ClassName() or new Namespace\ClassName()
+        if (preg_match_all('/(?<![.$\\\\])\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/', $line, $matches, PREG_OFFSET_CAPTURE)) {
             foreach ($matches[1] as $match) {
+                $functionName = $match[0];
+                $position = $match[1];
+
                 // Skip language constructs and common keywords
-                if (!in_array(strtolower($match), [
+                if (in_array(strtolower($functionName), [
                     'if', 'else', 'elseif', 'while', 'for', 'foreach', 'switch', 'case', 'default',
                     'try', 'catch', 'finally', 'class', 'function', 'interface', 'trait',
                     'namespace', 'use', 'echo', 'print', 'return', 'throw', 'include',
                     'require', 'include_once', 'require_once', 'isset', 'empty', 'unset',
-                    'array', 'list', 'exit', 'die', 'new', 'clone', 'instanceof'
+                    'array', 'list', 'exit', 'die', 'new', 'clone', 'instanceof',
+                    '__construct', '__destruct', '__call', '__callstatic', '__get', '__set',
+                    '__isset', '__unset', '__sleep', '__wakeup', '__serialize', '__unserialize',
+                    '__tostring', '__invoke', '__set_state', '__clone', '__debuginfo'
                 ])) {
-                    $functions[] = $match;
+                    continue;
                 }
+
+                // Check if this is part of a class instantiation by looking at the text before the function name
+                $beforeText = substr($line, 0, $position);
+
+                // Skip if preceded by 'new' (with optional namespace separator and whitespace)
+                if (preg_match('/\bnew\s+\\\\?\s*$/', $beforeText)) {
+                    continue;
+                }
+
+                // Skip if it's part of a catch block type hint
+                if (preg_match('/\bcatch\s*\(\s*\\\\?\s*$/', $beforeText)) {
+                    continue;
+                }
+
+                // Skip if it's part of a throw statement
+                if (preg_match('/\bthrow\s+new\s+\\\\?\s*$/', $beforeText)) {
+                    continue;
+                }
+
+                $functions[] = $functionName;
             }
         }
 
@@ -96,23 +175,28 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
         if (function_exists($functionName)) {
             return false;
         }
-        
+
         // Check if it's a known WordPress function
         if (in_array($functionName, $this->wordpressFunctions)) {
             return false;
         }
-        
+
+        // Check dependency exceptions based on detected ecosystems
+        if ($this->exceptionManager->isFunctionExcepted($functionName, $this->detectedEcosystems)) {
+            return false;
+        }
+
         // Check if it's a PHP function that might not be available in the target version
         if (isset($this->phpFunctions[$functionName])) {
             $requiredVersion = $this->phpFunctions[$functionName];
             return version_compare($phpVersion, $requiredVersion, '<');
         }
-        
+
         // Check for common WordPress functions that might be missing
         if ($this->isWordPressFunction($functionName)) {
             return false;
         }
-        
+
         // If we can't determine, assume it might be undefined
         return true;
     }
@@ -201,5 +285,17 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
             'intdiv' => '7.0.0',
             'preg_replace_callback_array' => '7.0.0',
         ];
+    }
+
+    private function updateScriptTagState(string $line): void {
+        // Check if we're entering a script tag (including within echo statements)
+        if (preg_match('/<script[^>]*>/', $line)) {
+            $this->insideScriptTag = true;
+        }
+
+        // Check if we're exiting a script tag (including within echo statements)
+        if (preg_match('/<\/script>/', $line)) {
+            $this->insideScriptTag = false;
+        }
     }
 }
