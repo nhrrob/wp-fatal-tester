@@ -114,19 +114,56 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
             return [];
         }
 
+        // Skip lines with class instantiations, exception handling, and type declarations
+        if (preg_match('/\bnew\s+\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*\s*\(/', $line) ||
+            preg_match('/\bcatch\s*\(\s*\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*\s/', $line) ||
+            preg_match('/\bthrow\s+new\s+\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*\s*\(/', $line) ||
+            preg_match('/\bextends\s+\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*/', $line) ||
+            preg_match('/\bimplements\s+\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*/', $line) ||
+            preg_match('/\binstanceof\s+\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*/', $line)) {
+            return [];
+        }
+
         // Match function calls: function_name( but exclude JavaScript method calls like .method(
-        if (preg_match_all('/(?<![.$])\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/', $line, $matches)) {
+        // Also exclude class instantiations with namespaces like new \ClassName() or new Namespace\ClassName()
+        if (preg_match_all('/(?<![.$\\\\])\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/', $line, $matches, PREG_OFFSET_CAPTURE)) {
             foreach ($matches[1] as $match) {
+                $functionName = $match[0];
+                $position = $match[1];
+
                 // Skip language constructs and common keywords
-                if (!in_array(strtolower($match), [
+                if (in_array(strtolower($functionName), [
                     'if', 'else', 'elseif', 'while', 'for', 'foreach', 'switch', 'case', 'default',
                     'try', 'catch', 'finally', 'class', 'function', 'interface', 'trait',
                     'namespace', 'use', 'echo', 'print', 'return', 'throw', 'include',
                     'require', 'include_once', 'require_once', 'isset', 'empty', 'unset',
-                    'array', 'list', 'exit', 'die', 'new', 'clone', 'instanceof'
+                    'array', 'list', 'exit', 'die', 'new', 'clone', 'instanceof',
+                    '__construct', '__destruct', '__call', '__callstatic', '__get', '__set',
+                    '__isset', '__unset', '__sleep', '__wakeup', '__serialize', '__unserialize',
+                    '__tostring', '__invoke', '__set_state', '__clone', '__debuginfo'
                 ])) {
-                    $functions[] = $match;
+                    continue;
                 }
+
+                // Check if this is part of a class instantiation by looking at the text before the function name
+                $beforeText = substr($line, 0, $position);
+
+                // Skip if preceded by 'new' (with optional namespace separator and whitespace)
+                if (preg_match('/\bnew\s+\\\\?\s*$/', $beforeText)) {
+                    continue;
+                }
+
+                // Skip if it's part of a catch block type hint
+                if (preg_match('/\bcatch\s*\(\s*\\\\?\s*$/', $beforeText)) {
+                    continue;
+                }
+
+                // Skip if it's part of a throw statement
+                if (preg_match('/\bthrow\s+new\s+\\\\?\s*$/', $beforeText)) {
+                    continue;
+                }
+
+                $functions[] = $functionName;
             }
         }
 

@@ -287,7 +287,7 @@ class ClassConflictDetector implements ErrorDetectorInterface {
             'LogicException', 'BadFunctionCallException', 'BadMethodCallException', 'DomainException',
             'InvalidArgumentException', 'LengthException', 'OutOfRangeException',
             'RuntimeException', 'OutOfBoundsException', 'OverflowException', 'RangeException',
-            'UnderflowException', 'UnexpectedValueException',
+            'UnderflowException', 'UnexpectedValueException', 'Throwable',
 
             // Date/Time classes
             'DateTime', 'DateTimeImmutable', 'DateInterval', 'DatePeriod', 'DateTimeZone',

@@ -293,6 +293,13 @@ class DependencyExceptionManager {
 
                 // Additional WooCommerce classes
                 'Automattic\\WooCommerce\\Utilities\\FeaturesUtil',
+                'WC_Admin_Settings', 'WC_Settings_API', 'WC_Integration',
+                'WC_Widget', 'WC_Widget_Cart', 'WC_Widget_Product_Categories',
+                'WC_Widget_Product_Search', 'WC_Widget_Product_Tag_Cloud',
+                'WC_Widget_Products', 'WC_Widget_Recently_Viewed',
+                'WC_Widget_Top_Rated_Products', 'WC_Widget_Recent_Reviews',
+                'WC_Widget_Layered_Nav', 'WC_Widget_Layered_Nav_Filters',
+                'WC_Widget_Price_Filter', 'WC_Widget_Rating_Filter',
             ],
             'class_patterns' => [
                 'WC_*',
@@ -367,10 +374,31 @@ class DependencyExceptionManager {
                 'FluentForm\\App\\Helpers\\Helper',
 
                 // WordPress core classes that might not be loaded during testing
-                'WP_Query', 'WP_User', 'WP_Post', 'WP_Term', 'WP_Comment',
-                'WP_Error', 'WP_HTTP', 'WP_Filesystem_Base', 'WP_Roles',
+                'WP_Query', 'WP_User_Query', 'WP_Comment_Query', 'WP_Term_Query', 'WP_Site_Query',
+                'WP_Network_Query', 'WP_Meta_Query', 'WP_Date_Query', 'WP_Tax_Query',
+                'WP_User', 'WP_Post', 'WP_Term', 'WP_Comment', 'WP_Taxonomy', 'WP_Site', 'WP_Network',
+                'WP_Error', 'WP_HTTP', 'WP_HTTP_Response', 'WP_HTTP_Requests_Response',
+                'WP_Filesystem_Base', 'WP_Roles', 'WP_Role', 'WP_Widget', 'WP_Customize_Manager',
+                'WP_List_Table', 'WP_Screen', 'WP_Admin_Bar', 'WP_Theme', 'WP_Locale',
+                'WP_Rewrite', 'WP_Hook', 'WP_Dependency', 'WP_Session_Tokens',
                 'Plugin_Upgrader', 'WP_Ajax_Upgrader_Skin', 'Automatic_Upgrader_Skin',
-                'WC_Query', 'DOMDocument', 'Exception',
+                'Theme_Upgrader', 'Core_Upgrader', 'Language_Pack_Upgrader',
+                'WP_Upgrader', 'WP_Upgrader_Skin', 'WP_Automatic_Updater',
+
+                // WooCommerce classes
+                'WC_Query', 'WC_Product', 'WC_Order', 'WC_Customer', 'WC_Cart', 'WC_Checkout',
+                'WC_Payment_Gateway', 'WC_Shipping_Method', 'WC_Tax', 'WC_Coupon',
+
+                // PHP built-in classes
+                'DOMDocument', 'DOMElement', 'DOMNode', 'DOMNodeList', 'DOMXPath',
+                'Exception', 'ErrorException', 'Error', 'ParseError', 'TypeError',
+                'LogicException', 'RuntimeException', 'InvalidArgumentException',
+                'DateTime', 'DateTimeImmutable', 'DateInterval', 'DatePeriod', 'DateTimeZone',
+                'PDO', 'PDOStatement', 'PDOException', 'mysqli', 'mysqli_stmt', 'mysqli_result',
+                'SimpleXMLElement', 'XMLReader', 'XMLWriter', 'XSLTProcessor',
+                'ReflectionClass', 'ReflectionMethod', 'ReflectionProperty', 'ReflectionFunction',
+                'SplFileInfo', 'SplFileObject', 'DirectoryIterator', 'RecursiveDirectoryIterator',
+                'ArrayIterator', 'ArrayObject', 'stdClass', 'Closure',
 
                 // Plugin-specific classes with typos (common in EA)
                 'HelperCLass', // Note the typo - this is how it appears in EA code
@@ -423,6 +451,11 @@ class DependencyExceptionManager {
                 // CSS functions that get incorrectly detected as PHP functions
                 'calc', 'rgba', 'rgb', 'hsl', 'hsla', 'linear-gradient', 'radial-gradient',
                 'gradient', 'var', 'url', 'attr', 'counter', 'counters',
+                'RotateX', 'RotateY', 'RotateZ', 'SkewX', 'SkewY', 'ScaleX', 'ScaleY',
+                'TranslateX', 'TranslateY', 'TranslateZ', 'Perspective',
+                'Color', 'Background', 'Desktop', 'Source', 'fills', 'steps', 'Point', 'draws',
+                'After', 'To', 'Interval', 'Top', 'Right', 'Bottom', 'Left',
+                'media', 'features',
 
                 // CSS pseudo-selectors and keywords
                 'not', 'child', 'hover', 'active', 'focus', 'visited', 'disabled',
@@ -437,7 +470,7 @@ class DependencyExceptionManager {
                 'and', 'or',
 
                 // Additional WordPress functions that are commonly used
-                'taxonomy_exists', 'sanitize_term', 'check_ajax_referer', 'sanitize_file_name',
+                'taxonomy_exists', 'sanitize_term', 'sanitize_post', 'check_ajax_referer', 'sanitize_file_name',
                 'sanitize_key', 'setup_postdata', 'email_exists', 'sanitize_user', 'validate_username',
                 'username_exists', 'media_handle_upload', 'retrieve_password', 'check_password_reset_key',
                 'reset_password', 'wpautop', 'zeroise', 'url_to_postid', 'current_theme_supports',
@@ -479,7 +512,20 @@ class DependencyExceptionManager {
                 'English', 'Portuguese', 'Chinese',
 
                 // Plugin-specific functions that are commonly used
-                'eael_*', 'ea_*', 'render_template_', 'checkout_order_review_template', 'checkout_order_review_default',
+                'eael_get_widget_settings', 'eael_pagination', 'eael_product_quick_view',
+                'eael_avoid_redirect_to_single_page', 'eael_woo_product_grid_actions',
+                'eael_validate_html_tag', 'eael_wp_kses', 'eael_allowed_protocols',
+                'eael_allowed_tags', 'eael_allowed_icon_tags', 'eael_fetch_color_or_global_color',
+                'eael_get_woo_product_gallery_image_srcs', 'eael_sanitize_relation',
+                'eael_get_all_user_ordered_products', 'eael_get_current_device_by_screen',
+                'eael_get_attachment_id_from_url', 'eael_rating_markup', 'eael_onpage_edit_template_markup',
+                'eael_e_optimized_markup', 'eael_checkout_cart_quantity_input_print',
+                'eael_woo_cart_totals', 'eael_cart_button_proceed_to_checkout',
+                'eael_print_produt_badge_html', 'eael_print_product_title_html',
+                'ea_get_woo_checkout_settings', 'ea_set_woo_checkout_settings', 'ea_checkout',
+                'ea_order_received', 'ea_order_pay', 'ea_coupon_template', 'ea_login_template',
+                'ea_get_woo_cart_settings', 'ea_set_woo_cart_settings',
+                'render_template_', 'render_default_template_', 'checkout_order_review_template', 'checkout_order_review_default',
                 'woo_cart_style_one', 'woo_cart_style_two', 'woo_cart_collaterals', 'output',
                 'set_eael_advanced_accordion_faq', 'include_with_variable', 'prevent_extension_loading',
                 'str_to_css_id', 'fix_old_query', 'go_premium', 'find_element_recursive', 'replace_widget_name',
