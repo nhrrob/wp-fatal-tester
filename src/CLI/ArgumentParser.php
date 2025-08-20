@@ -13,8 +13,8 @@ class ArgumentParser {
     private function initializeDefaults(): void {
         $this->options = [
             'plugin' => null,
-            'php' => ['7.4', '8.1', '8.2'],
-            'wp' => ['6.5', '6.6'],
+            'php' => ['7.4', '8.0', '8.1', '8.2', '8.3'],
+            'wp' => ['6.3', '6.4', '6.5', '6.6'],
             'show_all_errors' => false,
             'severity_filter' => ['error'], // Default to only fatal errors
             'help' => false,
@@ -148,8 +148,8 @@ OPTIONS:
     --all               Alias for --show-all-errors
     --fatal-only        Show only fatal errors (default behavior)
     --severity LEVELS   Comma-separated list of severity levels to show (error,warning)
-    --php VERSIONS      Comma-separated list of PHP versions to test (default: 7.4,8.1,8.2)
-    --wp VERSIONS       Comma-separated list of WordPress versions to test (default: 6.5,6.6)
+    --php VERSIONS      Comma-separated list of PHP versions to test (default: 7.4,8.0,8.1,8.2,8.3)
+    --wp VERSIONS       Comma-separated list of WordPress versions to test (default: 6.3,6.4,6.5,6.6)
     --verbose, -v       Enable verbose output
     --no-colors         Disable colored output
     --help, -h          Show this help message
