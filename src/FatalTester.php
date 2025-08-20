@@ -108,6 +108,11 @@ class FatalTester {
     }
 
     private function getPluginPath(string $plugin): string {
+        // If it's a single file, return the directory containing it
+        if (is_file($plugin)) {
+            return dirname(realpath($plugin));
+        }
+
         // First, check if the plugin parameter is already an absolute path
         if (is_dir($plugin) && $this->isValidPluginDirectory($plugin)) {
             return realpath($plugin);
@@ -115,7 +120,6 @@ class FatalTester {
 
         // Try different possible plugin paths for relative names
         $possiblePaths = [
-            getcwd(), // Current directory
             getcwd() . '/' . $plugin, // Plugin subdirectory
             dirname(getcwd()) . '/' . $plugin, // Parent directory
             '/wp-content/plugins/' . $plugin, // Standard WP plugin directory
@@ -127,13 +131,50 @@ class FatalTester {
             }
         }
 
-        return getcwd(); // Fallback to current directory
+        // Only use current directory if it's NOT the wp-fatal-tester package directory
+        $currentDir = getcwd();
+        if (!$this->isWpFatalTesterDirectory($currentDir)) {
+            return $currentDir;
+        }
+
+        // If we're in the wp-fatal-tester directory, refuse to scan
+        throw new \InvalidArgumentException(
+            "Cannot scan wp-fatal-tester package directory. Please specify a valid plugin path."
+        );
     }
 
     private function isValidPluginDirectory(string $path): bool {
         // Check if directory contains PHP files
         $phpFiles = glob($path . '/*.php');
         return !empty($phpFiles);
+    }
+
+    private function isWpFatalTesterDirectory(string $path): bool {
+        // Check for wp-fatal-tester package indicators
+        $indicators = [
+            'composer.json',
+            'fataltest',
+            'src/FatalTester.php',
+            'src/Detectors',
+            'src/Scanner'
+        ];
+
+        foreach ($indicators as $indicator) {
+            if (!file_exists($path . '/' . $indicator)) {
+                return false;
+            }
+        }
+
+        // Additional check: look for our specific namespace in composer.json
+        $composerFile = $path . '/composer.json';
+        if (file_exists($composerFile)) {
+            $composerData = json_decode(file_get_contents($composerFile), true);
+            if (isset($composerData['name']) && $composerData['name'] === 'nhrrob/wp-fatal-tester') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function validatePluginPath(string $path): bool {

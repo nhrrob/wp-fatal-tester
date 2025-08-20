@@ -3,18 +3,23 @@ namespace NHRROB\WPFatalTester\Detectors;
 
 use NHRROB\WPFatalTester\Models\FatalError;
 use NHRROB\WPFatalTester\Exceptions\DependencyExceptionManager;
+use NHRROB\WPFatalTester\Analyzers\WordPressContextAnalyzer;
 
 class UndefinedFunctionDetector implements ErrorDetectorInterface {
 
     private array $wordpressFunctions = [];
+    private array $wordpressAdminFunctions = [];
     private array $phpFunctions = [];
     private bool $insideScriptTag = false;
     private DependencyExceptionManager $exceptionManager;
     private array $detectedEcosystems = [];
+    private WordPressContextAnalyzer $contextAnalyzer;
 
     public function __construct(?DependencyExceptionManager $exceptionManager = null) {
         $this->exceptionManager = $exceptionManager ?? new DependencyExceptionManager();
+        $this->contextAnalyzer = new WordPressContextAnalyzer();
         $this->initializeWordPressFunctions();
+        $this->initializeWordPressAdminFunctions();
         $this->initializePHPFunctions();
     }
 
@@ -54,14 +59,30 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
             
             foreach ($functionCalls as $functionName) {
                 if ($this->isUndefinedFunction($functionName, $phpVersion, $wpVersion)) {
+                    // Analyze context for WordPress admin functions
+                    $context = 'unknown';
+                    $severity = 'error';
+                    $suggestion = $this->getSuggestionForFunction($functionName);
+
+                    if (in_array($functionName, $this->wordpressAdminFunctions)) {
+                        $context = $this->contextAnalyzer->analyzeContext($filePath, $lineNumber, $functionName);
+                        $severity = $this->contextAnalyzer->getSeverityForContext($context, $functionName);
+                        $suggestion = $this->contextAnalyzer->getContextAwareSuggestion($context, $functionName);
+                    }
+
                     $errors[] = new FatalError(
                         type: 'UNDEFINED_FUNCTION',
                         message: "Call to undefined function '{$functionName}'",
                         file: $filePath,
                         line: $lineNumber,
-                        severity: 'error',
-                        suggestion: $this->getSuggestionForFunction($functionName),
-                        context: ['function' => $functionName, 'php_version' => $phpVersion, 'wp_version' => $wpVersion]
+                        severity: $severity,
+                        suggestion: $suggestion,
+                        context: [
+                            'function' => $functionName,
+                            'php_version' => $phpVersion,
+                            'wp_version' => $wpVersion,
+                            'wp_context' => $context
+                        ]
                     );
                 }
             }
@@ -78,7 +99,7 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
             return [];
         }
 
-        // Remove comments
+        // Remove comments first
         $line = preg_replace('/\/\/.*$/', '', $line);
         $line = preg_replace('/\/\*.*?\*\//', '', $line);
 
@@ -114,6 +135,16 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
             return [];
         }
 
+        // Skip lines that contain only strings or documentation
+        if (preg_match('/^\s*["\'].*["\'][\s,;]*$/', $line)) {
+            return [];
+        }
+
+        // Skip heredoc/nowdoc content
+        if (preg_match('/<<<["\']?\w+["\']?/', $line)) {
+            return [];
+        }
+
         // Skip lines with class instantiations, exception handling, and type declarations
         if (preg_match('/\bnew\s+\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*\s*\(/', $line) ||
             preg_match('/\bcatch\s*\(\s*\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*\s/', $line) ||
@@ -124,9 +155,12 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
             return [];
         }
 
+        // Remove string literals to avoid matching function names inside strings
+        $lineWithoutStrings = preg_replace('/(["\'])(?:(?=(\\\\?))\2.)*?\1/', '', $line);
+
         // Match function calls: function_name( but exclude JavaScript method calls like .method(
         // Also exclude class instantiations with namespaces like new \ClassName() or new Namespace\ClassName()
-        if (preg_match_all('/(?<![.$\\\\])\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/', $line, $matches, PREG_OFFSET_CAPTURE)) {
+        if (preg_match_all('/(?<![.$\\\\])\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/', $lineWithoutStrings, $matches, PREG_OFFSET_CAPTURE)) {
             foreach ($matches[1] as $match) {
                 $functionName = $match[0];
                 $position = $match[1];
@@ -138,6 +172,7 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
                     'namespace', 'use', 'echo', 'print', 'return', 'throw', 'include',
                     'require', 'include_once', 'require_once', 'isset', 'empty', 'unset',
                     'array', 'list', 'exit', 'die', 'new', 'clone', 'instanceof',
+                    'match', 'enum', 'readonly', // PHP 8.0+ language constructs
                     '__construct', '__destruct', '__call', '__callstatic', '__get', '__set',
                     '__isset', '__unset', '__sleep', '__wakeup', '__serialize', '__unserialize',
                     '__tostring', '__invoke', '__set_state', '__clone', '__debuginfo'
@@ -146,7 +181,7 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
                 }
 
                 // Check if this is part of a class instantiation by looking at the text before the function name
-                $beforeText = substr($line, 0, $position);
+                $beforeText = substr($lineWithoutStrings, 0, $position);
 
                 // Skip if preceded by 'new' (with optional namespace separator and whitespace)
                 if (preg_match('/\bnew\s+\\\\?\s*$/', $beforeText)) {
@@ -179,6 +214,11 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
         // Check if it's a known WordPress function
         if (in_array($functionName, $this->wordpressFunctions)) {
             return false;
+        }
+
+        // Check if it's a WordPress admin function that requires special includes
+        if (in_array($functionName, $this->wordpressAdminFunctions)) {
+            return true; // These should be flagged as potentially undefined
         }
 
         // Check dependency exceptions based on detected ecosystems
@@ -228,15 +268,19 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
     }
 
     private function getSuggestionForFunction(string $functionName): string {
+        if (in_array($functionName, $this->wordpressAdminFunctions)) {
+            return "Include wp-admin/includes/plugin.php before calling '{$functionName}' or check if the function exists with function_exists()";
+        }
+
         if ($this->isWordPressFunction($functionName)) {
             return "Ensure WordPress is loaded before calling '{$functionName}' or check if the function exists with function_exists()";
         }
-        
+
         if (isset($this->phpFunctions[$functionName])) {
             $requiredVersion = $this->phpFunctions[$functionName];
             return "Function '{$functionName}' requires PHP {$requiredVersion} or higher";
         }
-        
+
         return "Check if function '{$functionName}' is defined or include the required file/library";
     }
 
@@ -263,6 +307,30 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
             'get_template_directory', 'get_template_directory_uri',
             'get_stylesheet_directory', 'get_stylesheet_directory_uri',
             'plugin_dir_path', 'plugin_dir_url', 'plugins_url',
+        ];
+    }
+
+    private function initializeWordPressAdminFunctions(): void {
+        // WordPress admin functions that require wp-admin/includes/plugin.php
+        $this->wordpressAdminFunctions = [
+            'is_plugin_active',
+            'is_plugin_active_for_network',
+            'is_plugin_inactive',
+            'activate_plugin',
+            'activate_plugins',
+            'deactivate_plugins',
+            'validate_plugin',
+            'validate_active_plugins',
+            'is_network_only_plugin',
+            'is_plugin_paused',
+            'resume_plugin',
+            'get_plugin_data',
+            'get_plugins',
+            'get_mu_plugins',
+            'get_dropins',
+            'search_theme_directories',
+            'get_broken_themes',
+            'wp_clean_plugins_cache',
         ];
     }
 
