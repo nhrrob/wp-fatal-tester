@@ -108,7 +108,12 @@ class FatalTester {
     }
 
     private function getPluginPath(string $plugin): string {
-        // Try different possible plugin paths
+        // First, check if the plugin parameter is already an absolute path
+        if (is_dir($plugin) && $this->isValidPluginDirectory($plugin)) {
+            return realpath($plugin);
+        }
+
+        // Try different possible plugin paths for relative names
         $possiblePaths = [
             getcwd(), // Current directory
             getcwd() . '/' . $plugin, // Plugin subdirectory

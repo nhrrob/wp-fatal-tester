@@ -138,10 +138,10 @@ class ArgumentParser {
 WordPress Fatal Error Tester
 
 USAGE:
-    fataltest [plugin-name] [options]
+    fataltest [plugin-path] [options]
 
 ARGUMENTS:
-    plugin-name         Name of the plugin to test (defaults to current directory name)
+    plugin-path         Plugin name or absolute path to plugin directory (defaults to current directory name)
 
 OPTIONS:
     --show-all-errors   Show all errors including warnings (default: fatal errors only)
@@ -162,6 +162,7 @@ ECOSYSTEM OPTIONS:
 EXAMPLES:
     fataltest                           # Test current directory, fatal errors only
     fataltest my-plugin                 # Test specific plugin, fatal errors only
+    fataltest /path/to/plugin           # Test plugin at absolute path, fatal errors only
     fataltest --show-all-errors         # Show all errors including warnings
     fataltest --severity error,warning  # Explicitly set severity levels
     fataltest --php 8.0,8.1,8.2        # Test against specific PHP versions
