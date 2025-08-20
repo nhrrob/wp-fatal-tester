@@ -110,7 +110,7 @@ $result3 = another_undefined_function();
 ');
 
         $errors = $this->detector->detect($testFile, '8.1', '6.5');
-        
+
         // Filter to only undefined function errors
         $undefinedFunctionErrors = array_filter($errors, function($error) {
             return $error->type === 'UNDEFINED_FUNCTION';
@@ -126,6 +126,44 @@ $result3 = another_undefined_function();
         $this->assertContains("Call to undefined function 'undefined_function_one'", $errorMessages);
         $this->assertContains("Call to undefined function 'undefined_function_two'", $errorMessages);
         $this->assertContains("Call to undefined function 'another_undefined_function'", $errorMessages);
+
+        unlink($testFile);
+    }
+
+    public function testWordPressAdminFunctionsDetectedAsUndefined(): void
+    {
+        $testFile = tempnam(sys_get_temp_dir(), 'test_wp_admin_functions');
+        file_put_contents($testFile, '<?php
+// These WordPress admin functions should be flagged as undefined
+// because they require wp-admin/includes/plugin.php to be loaded
+if (is_plugin_active_for_network("my-plugin/my-plugin.php")) {
+    echo "Plugin is active for network";
+}
+
+if (is_plugin_active("another-plugin/another-plugin.php")) {
+    echo "Plugin is active";
+}
+
+activate_plugin("test-plugin/test-plugin.php");
+deactivate_plugins(array("test-plugin/test-plugin.php"));
+');
+
+        $errors = $this->detector->detect($testFile, '8.1', '6.5');
+
+        // Filter to only undefined function errors
+        $undefinedFunctionErrors = array_filter($errors, function($error) {
+            return $error->type === 'UNDEFINED_FUNCTION';
+        });
+
+        $errorMessages = array_map(function($error) {
+            return $error->message;
+        }, $undefinedFunctionErrors);
+
+        // These WordPress admin functions should be detected as undefined
+        $this->assertContains("Call to undefined function 'is_plugin_active_for_network'", $errorMessages);
+        $this->assertContains("Call to undefined function 'is_plugin_active'", $errorMessages);
+        $this->assertContains("Call to undefined function 'activate_plugin'", $errorMessages);
+        $this->assertContains("Call to undefined function 'deactivate_plugins'", $errorMessages);
 
         unlink($testFile);
     }

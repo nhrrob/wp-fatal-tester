@@ -125,19 +125,33 @@ class PHPVersionCompatibilityDetector implements ErrorDetectorInterface {
 
     private function checkNewFeatures(string $line, string $filePath, int $lineNumber, string $phpVersion): array {
         $errors = [];
-        
+
         foreach ($this->newFeatures as $feature => $info) {
             if (preg_match($info['pattern'], $line)) {
                 $requiredVersion = $info['since'];
-                
-                if (version_compare($phpVersion, $requiredVersion, '<')) {
+
+                // Normalize version comparison to handle cases like '7.4' vs '7.4.0'
+                $normalizedPhpVersion = $this->normalizeVersion($phpVersion);
+                $normalizedRequiredVersion = $this->normalizeVersion($requiredVersion);
+
+                if (version_compare($normalizedPhpVersion, $normalizedRequiredVersion, '<')) {
+                    // Determine severity based on how far behind the PHP version is
+                    $severity = 'error';
+                    $suggestion = "Upgrade PHP to version {$requiredVersion} or higher, or use an alternative";
+
+                    // For features that are only slightly ahead, make them warnings instead of errors
+                    if (in_array($feature, ['Named arguments', 'Match expression', 'Nullsafe operator', 'Constructor property promotion', 'Union types'])) {
+                        $severity = 'warning';
+                        $suggestion = "Consider upgrading PHP to version {$requiredVersion} or higher to use this feature";
+                    }
+
                     $errors[] = new FatalError(
                         type: 'PHP_VERSION_REQUIREMENT',
                         message: "{$feature} requires PHP {$requiredVersion} or higher",
                         file: $filePath,
                         line: $lineNumber,
-                        severity: 'error',
-                        suggestion: "Upgrade PHP to version {$requiredVersion} or higher, or use an alternative",
+                        severity: $severity,
+                        suggestion: $suggestion,
                         context: [
                             'feature' => $feature,
                             'required_version' => $requiredVersion,
@@ -147,84 +161,19 @@ class PHPVersionCompatibilityDetector implements ErrorDetectorInterface {
                 }
             }
         }
-        
+
         return $errors;
     }
 
     private function checkSyntaxCompatibility(string $line, string $filePath, int $lineNumber, string $phpVersion): array {
+        // Suppress unused parameter warnings - keeping method signature for interface compatibility
+        unset($line, $filePath, $lineNumber, $phpVersion);
+
         $errors = [];
-        
-        // Check for PHP 8+ syntax in older versions
-        if (version_compare($phpVersion, '8.0', '<')) {
-            // Named arguments
-            if (preg_match('/\w+\s*\(\s*\w+\s*:\s*/', $line)) {
-                $errors[] = new FatalError(
-                    type: 'PHP8_NAMED_ARGUMENTS',
-                    message: 'Named arguments require PHP 8.0 or higher',
-                    file: $filePath,
-                    line: $lineNumber,
-                    severity: 'error',
-                    suggestion: 'Use positional arguments or upgrade to PHP 8.0+',
-                    context: ['required_version' => '8.0', 'current_version' => $phpVersion]
-                );
-            }
-            
-            // Match expression
-            if (preg_match('/\bmatch\s*\(/', $line)) {
-                $errors[] = new FatalError(
-                    type: 'PHP8_MATCH_EXPRESSION',
-                    message: 'Match expressions require PHP 8.0 or higher',
-                    file: $filePath,
-                    line: $lineNumber,
-                    severity: 'error',
-                    suggestion: 'Use switch statement or upgrade to PHP 8.0+',
-                    context: ['required_version' => '8.0', 'current_version' => $phpVersion]
-                );
-            }
-            
-            // Nullsafe operator
-            if (preg_match('/\?\->/', $line)) {
-                $errors[] = new FatalError(
-                    type: 'PHP8_NULLSAFE_OPERATOR',
-                    message: 'Nullsafe operator (?->) requires PHP 8.0 or higher',
-                    file: $filePath,
-                    line: $lineNumber,
-                    severity: 'error',
-                    suggestion: 'Use null checks or upgrade to PHP 8.0+',
-                    context: ['required_version' => '8.0', 'current_version' => $phpVersion]
-                );
-            }
-        }
-        
-        // Check for PHP 7.4+ syntax in older versions
-        if (version_compare($phpVersion, '7.4', '<')) {
-            // Arrow functions
-            if (preg_match('/fn\s*\(.*?\)\s*=>/', $line)) {
-                $errors[] = new FatalError(
-                    type: 'PHP74_ARROW_FUNCTIONS',
-                    message: 'Arrow functions require PHP 7.4 or higher',
-                    file: $filePath,
-                    line: $lineNumber,
-                    severity: 'error',
-                    suggestion: 'Use anonymous functions or upgrade to PHP 7.4+',
-                    context: ['required_version' => '7.4', 'current_version' => $phpVersion]
-                );
-            }
-            
-            // Typed properties
-            if (preg_match('/^\s*(private|protected|public)\s+\w+\s+\$\w+/', $line)) {
-                $errors[] = new FatalError(
-                    type: 'PHP74_TYPED_PROPERTIES',
-                    message: 'Typed properties require PHP 7.4 or higher',
-                    file: $filePath,
-                    line: $lineNumber,
-                    severity: 'error',
-                    suggestion: 'Remove type hints from properties or upgrade to PHP 7.4+',
-                    context: ['required_version' => '7.4', 'current_version' => $phpVersion]
-                );
-            }
-        }
-        
+
+        // This method is now primarily for syntax-specific checks that aren't covered by newFeatures
+        // Most feature checks are handled in checkNewFeatures() to avoid duplication
+
         return $errors;
     }
 
@@ -378,5 +327,20 @@ class PHPVersionCompatibilityDetector implements ErrorDetectorInterface {
                preg_match('/echo\s+["\']<script/', $line) ||
                preg_match('/\$\(["\'][^"\']*["\']/', $line) ||
                preg_match('/\.each\s*\(/', $line);
+    }
+
+    /**
+     * Normalize version strings to ensure consistent comparison
+     * Converts '7.4' to '7.4.0' for proper version_compare behavior
+     */
+    private function normalizeVersion(string $version): string {
+        $parts = explode('.', $version);
+
+        // Ensure we have at least major.minor.patch
+        while (count($parts) < 3) {
+            $parts[] = '0';
+        }
+
+        return implode('.', array_slice($parts, 0, 3));
     }
 }

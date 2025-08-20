@@ -13,8 +13,8 @@ class ArgumentParser {
     private function initializeDefaults(): void {
         $this->options = [
             'plugin' => null,
-            'php' => ['8.1', '8.2'],
-            'wp' => ['6.5', '6.6'],
+            'php' => ['7.4', '8.0', '8.1', '8.2', '8.3'],
+            'wp' => ['6.3', '6.4', '6.5', '6.6'],
             'show_all_errors' => false,
             'severity_filter' => ['error'], // Default to only fatal errors
             'help' => false,
@@ -138,18 +138,18 @@ class ArgumentParser {
 WordPress Fatal Error Tester
 
 USAGE:
-    fataltest [plugin-name] [options]
+    fataltest [plugin-path] [options]
 
 ARGUMENTS:
-    plugin-name         Name of the plugin to test (defaults to current directory name)
+    plugin-path         Plugin name or absolute path to plugin directory (defaults to current directory name)
 
 OPTIONS:
     --show-all-errors   Show all errors including warnings (default: fatal errors only)
     --all               Alias for --show-all-errors
     --fatal-only        Show only fatal errors (default behavior)
     --severity LEVELS   Comma-separated list of severity levels to show (error,warning)
-    --php VERSIONS      Comma-separated list of PHP versions to test (default: 8.1,8.2)
-    --wp VERSIONS       Comma-separated list of WordPress versions to test (default: 6.5,6.6)
+    --php VERSIONS      Comma-separated list of PHP versions to test (default: 7.4,8.0,8.1,8.2,8.3)
+    --wp VERSIONS       Comma-separated list of WordPress versions to test (default: 6.3,6.4,6.5,6.6)
     --verbose, -v       Enable verbose output
     --no-colors         Disable colored output
     --help, -h          Show this help message
@@ -162,6 +162,7 @@ ECOSYSTEM OPTIONS:
 EXAMPLES:
     fataltest                           # Test current directory, fatal errors only
     fataltest my-plugin                 # Test specific plugin, fatal errors only
+    fataltest /path/to/plugin           # Test plugin at absolute path, fatal errors only
     fataltest --show-all-errors         # Show all errors including warnings
     fataltest --severity error,warning  # Explicitly set severity levels
     fataltest --php 8.0,8.1,8.2        # Test against specific PHP versions

@@ -68,7 +68,7 @@ vendor/bin/fataltest --help
 vendor/bin/fataltest my-plugin --show-all-errors
 
 # Test specific PHP and WordPress versions
-vendor/bin/fataltest my-plugin --php 8.0,8.1,8.2 --wp 6.4,6.5,6.6
+vendor/bin/fataltest my-plugin --php 8.0,8.1,8.2 --wp 6.3,6.4,6.5,6.6
 
 # Custom severity filtering
 vendor/bin/fataltest my-plugin --severity error,warning
@@ -79,9 +79,11 @@ vendor/bin/fataltest my-plugin --no-colors
 
 ### What It Tests
 
-The tool automatically tests your code against:
-- **PHP Versions**: 8.1, 8.2 (configurable via `--php` option)
-- **WordPress Versions**: 6.5, 6.6 (configurable via `--wp` option)
+The tool automatically tests your code against **all major PHP and WordPress versions**:
+- **PHP Versions**: 7.4, 8.0, 8.1, 8.2, 8.3 (configurable via `--php` option)
+- **WordPress Versions**: 6.3, 6.4, 6.5, 6.6 (configurable via `--wp` option)
+
+This comprehensive testing matrix ensures your plugin works across **20 different environment combinations** by default, providing maximum compatibility coverage for WordPress plugins.
 
 ### Default Behavior
 
@@ -92,18 +94,24 @@ The tool automatically tests your code against:
 
 Use `--show-all-errors` to see warnings and other non-fatal issues when needed.
 
+### Tested with Essential Addons for Elementor
+
+wp-fatal-tester has been extensively tested with the **Essential Addons for Elementor** free plugin and passes all compatibility tests across PHP 7.4-8.3 and WordPress 6.3-6.6. The tool includes smart ecosystem detection to prevent false positives for Elementor and WooCommerce dependencies.
+
+See `EA_TESTING_GUIDE.md` for detailed testing instructions and integration examples.
+
 ### Example Output
 
 When you run `vendor/bin/fataltest` from within your plugin directory:
 
 ```
 🚀 Running fatal test for plugin: my-awesome-plugin
-   PHP versions: 8.1, 8.2
-   WP versions: 6.5, 6.6
+   PHP versions: 7.4, 8.0, 8.1, 8.2, 8.3
+   WP versions: 6.3, 6.4, 6.5, 6.6
    Plugin path: /path/to/my-awesome-plugin
    Filter: Fatal errors only (use --show-all-errors to see warnings)
 
-▶️ Testing my-awesome-plugin on PHP 8.1, WP 6.5 (1/4)...
+▶️ Testing my-awesome-plugin on PHP 7.4, WP 6.3 (1/20)...
 ❌ Found 2 error(s) on PHP 8.1, WP 6.5 (15,847 total, filtered by severity)
 
 📋 SYNTAX_ERROR (1 error(s)):

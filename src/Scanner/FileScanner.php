@@ -22,6 +22,7 @@ class FileScanner {
         '.github',
         '.vscode',
         '.idea',
+        'wp-fatal-tester', // Exclude wp-fatal-tester package directory
     ];
     
     private array $excludedFiles = [
@@ -72,12 +73,17 @@ class FileScanner {
                 if (in_array($filename, $this->excludedDirectories)) {
                     continue;
                 }
-                
+
+                // Skip wp-fatal-tester package directories (additional check)
+                if ($this->isWpFatalTesterDirectory($filepath)) {
+                    continue;
+                }
+
                 // Skip hidden directories
                 if (strpos($filename, '.') === 0) {
                     continue;
                 }
-                
+
                 // Recursively scan subdirectory
                 $this->scanDirectoryRecursive($filepath, $files);
             } elseif ($fileInfo->isFile()) {
@@ -237,5 +243,31 @@ class FileScanner {
 
     public function getAllowedExtensions(): array {
         return $this->allowedExtensions;
+    }
+
+    private function isWpFatalTesterDirectory(string $path): bool {
+        // Check for wp-fatal-tester package indicators
+        $indicators = [
+            'fataltest',
+            'src/FatalTester.php',
+            'composer.json'
+        ];
+
+        foreach ($indicators as $indicator) {
+            if (!file_exists($path . '/' . $indicator)) {
+                return false;
+            }
+        }
+
+        // Additional check: look for our specific namespace in composer.json
+        $composerFile = $path . '/composer.json';
+        if (file_exists($composerFile)) {
+            $composerData = json_decode(file_get_contents($composerFile), true);
+            if (isset($composerData['name']) && $composerData['name'] === 'nhrrob/wp-fatal-tester') {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
