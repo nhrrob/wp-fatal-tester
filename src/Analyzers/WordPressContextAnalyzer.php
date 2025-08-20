@@ -78,19 +78,19 @@ class WordPressContextAnalyzer {
                 return true;
             }
         }
-        
+
         // Check for is_admin() conditional
         if (preg_match('/if\s*\(\s*is_admin\s*\(\s*\)\s*\)/', $context)) {
             return true;
         }
-        
+
         // Check for admin-only file patterns
-        if (preg_match('/wp-admin\//', $context) || 
+        if (preg_match('/wp-admin\//', $context) ||
             preg_match('/admin\.php/', $context) ||
             preg_match('/admin_/', $context)) {
             return true;
         }
-        
+
         // Check if we're inside an admin callback function
         if ($this->isInsideAdminCallback($allLines, $lineNumber)) {
             return true;
@@ -98,6 +98,11 @@ class WordPressContextAnalyzer {
 
         // Check for Elementor editor context patterns
         if ($this->isInElementorEditorContext($context, $allLines, $lineNumber)) {
+            return true;
+        }
+
+        // Check for admin-only class patterns
+        if ($this->isInAdminClass($allLines, $lineNumber)) {
             return true;
         }
 
@@ -122,6 +127,33 @@ class WordPressContextAnalyzer {
         for ($i = max(0, $lineNumber - 50); $i < min(count($allLines), $lineNumber + 10); $i++) {
             $line = $allLines[$i];
             if (preg_match('/(public|private|protected)?\s*function\s+(print_template_views|templately_promo.*|.*editor.*|.*setup.*wizard.*|data_plugins_content|eael_quick_setup_data)/i', $line)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if the function call is in an admin-only class
+     */
+    private function isInAdminClass(array $allLines, int $lineNumber): bool {
+        // Look for class definition and admin patterns in the file
+        for ($i = 0; $i < count($allLines); $i++) {
+            $line = $allLines[$i];
+
+            // Check for admin-only class names
+            if (preg_match('/class\s+.*(?:Admin|Setup_Wizard|Dashboard|Settings|Options|Manager|Backend|WPDeveloper_Setup_Wizard)/i', $line)) {
+                return true;
+            }
+
+            // Check for admin hooks in constructor or class methods
+            if (preg_match('/add_action\s*\(\s*["\'](?:admin_|wp_ajax_|in_admin_)/i', $line)) {
+                return true;
+            }
+
+            // Check for admin menu functions
+            if (preg_match('/add_(?:menu|submenu|options|management|theme)_page/i', $line)) {
                 return true;
             }
         }
