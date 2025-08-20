@@ -80,7 +80,7 @@ vendor/bin/fataltest my-plugin --no-colors
 ### What It Tests
 
 The tool automatically tests your code against:
-- **PHP Versions**: 8.1, 8.2 (configurable via `--php` option)
+- **PHP Versions**: 7.4, 8.1, 8.2 (configurable via `--php` option)
 - **WordPress Versions**: 6.5, 6.6 (configurable via `--wp` option)
 
 ### Default Behavior
@@ -98,12 +98,12 @@ When you run `vendor/bin/fataltest` from within your plugin directory:
 
 ```
 🚀 Running fatal test for plugin: my-awesome-plugin
-   PHP versions: 8.1, 8.2
+   PHP versions: 7.4, 8.1, 8.2
    WP versions: 6.5, 6.6
    Plugin path: /path/to/my-awesome-plugin
    Filter: Fatal errors only (use --show-all-errors to see warnings)
 
-▶️ Testing my-awesome-plugin on PHP 8.1, WP 6.5 (1/4)...
+▶️ Testing my-awesome-plugin on PHP 7.4, WP 6.5 (1/6)...
 ❌ Found 2 error(s) on PHP 8.1, WP 6.5 (15,847 total, filtered by severity)
 
 📋 SYNTAX_ERROR (1 error(s)):
