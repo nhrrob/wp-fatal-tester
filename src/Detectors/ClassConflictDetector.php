@@ -37,31 +37,39 @@ class ClassConflictDetector implements ErrorDetectorInterface {
         $errors = [];
         $content = file_get_contents($filePath);
         $lines = explode("\n", $content);
-        
+
+        // Analyze the content to find class_exists() guarded blocks
+        $guardedClasses = $this->findClassExistsGuardedClasses($content);
+
         foreach ($lines as $lineNumber => $line) {
             $lineNumber++; // 1-based line numbers
-            
+
             // Check for class declarations
             if (preg_match('/^\s*class\s+([a-zA-Z_][a-zA-Z0-9_]*)/i', $line, $matches)) {
                 $className = $matches[1];
                 $errors = array_merge($errors, $this->checkClassConflict($className, $filePath, $lineNumber));
             }
-            
+
             // Check for interface declarations
             if (preg_match('/^\s*interface\s+([a-zA-Z_][a-zA-Z0-9_]*)/i', $line, $matches)) {
                 $interfaceName = $matches[1];
                 $errors = array_merge($errors, $this->checkInterfaceConflict($interfaceName, $filePath, $lineNumber));
             }
-            
+
             // Check for trait declarations
             if (preg_match('/^\s*trait\s+([a-zA-Z_][a-zA-Z0-9_]*)/i', $line, $matches)) {
                 $traitName = $matches[1];
                 $errors = array_merge($errors, $this->checkTraitConflict($traitName, $filePath, $lineNumber));
             }
-            
+
             // Check for undefined class usage
             $classUsages = $this->extractClassUsages($line);
             foreach ($classUsages as $className) {
+                // Skip if this class is guarded by class_exists()
+                if (in_array($className, $guardedClasses)) {
+                    continue;
+                }
+
                 if ($this->isUndefinedClass($className)) {
                     $exceptionReason = $this->exceptionManager->getClassExceptionReason($className, $this->detectedEcosystems);
 
@@ -93,7 +101,7 @@ class ClassConflictDetector implements ErrorDetectorInterface {
                 }
             }
         }
-        
+
         return $errors;
     }
 
@@ -244,6 +252,65 @@ class ClassConflictDetector implements ErrorDetectorInterface {
         });
 
         return array_unique(array_filter($classes));
+    }
+
+    /**
+     * Find classes that are properly guarded by class_exists() conditionals
+     * This helps prevent false positives for properly guarded class usage
+     */
+    private function findClassExistsGuardedClasses(string $content): array {
+        $guardedClasses = [];
+
+        // Remove comments to avoid false matches
+        $content = preg_replace('/\/\/.*$/m', '', $content);
+        $content = preg_replace('/\/\*.*?\*\//s', '', $content);
+
+        // Pattern to match class_exists() conditionals and their blocks
+        // This handles various formats:
+        // if (class_exists('ClassName')) { ... }
+        // if ( class_exists( 'ClassName' ) ) { ... }
+        // if (class_exists("ClassName")) { ... }
+        $pattern = '/if\s*\(\s*(class_exists|interface_exists|trait_exists)\s*\(\s*[\'"]([^\'\"]+)[\'"]\s*\)\s*\)\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/s';
+
+        if (preg_match_all($pattern, $content, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $match) {
+                $className = $match[2];
+                $blockContent = $match[3];
+
+                // Clean up the class name (remove leading backslashes)
+                $className = ltrim($className, '\\');
+
+                // Check if the class is actually used in the conditional block
+                if ($this->isClassUsedInBlock($className, $blockContent)) {
+                    $guardedClasses[] = $className;
+                }
+            }
+        }
+
+        return array_unique($guardedClasses);
+    }
+
+    /**
+     * Check if a class is used within a code block
+     */
+    private function isClassUsedInBlock(string $className, string $blockContent): bool {
+        // Escape the class name for regex
+        $escapedClassName = preg_quote($className, '/');
+
+        // Check for various class usage patterns within the block
+        $patterns = [
+            '/\\\\?' . $escapedClassName . '::[a-zA-Z_][a-zA-Z0-9_]*/',  // ClassName::method()
+            '/new\s+\\\\?' . $escapedClassName . '\s*\(/',               // new ClassName()
+            '/instanceof\s+\\\\?' . $escapedClassName . '/',             // instanceof ClassName
+        ];
+
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $blockContent)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function isUndefinedClass(string $className): bool {
