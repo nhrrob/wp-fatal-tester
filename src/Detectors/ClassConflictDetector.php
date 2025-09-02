@@ -7,6 +7,8 @@ use NHRROB\WPFatalTester\Exceptions\DependencyExceptionManager;
 class ClassConflictDetector implements ErrorDetectorInterface {
 
     private array $declaredClasses = [];
+    private array $namespacedClasses = []; // Track classes with their full namespace
+    private array $fileNamespaces = []; // Track namespace for each file
     private array $wordpressClasses = [];
     private DependencyExceptionManager $exceptionManager;
     private array $detectedEcosystems = [];
@@ -24,6 +26,60 @@ class ClassConflictDetector implements ErrorDetectorInterface {
     public function setDetectedEcosystems(array $ecosystems): void {
         $this->detectedEcosystems = $ecosystems;
     }
+
+    /**
+     * Pre-scan all files to build a registry of declared classes with their namespaces
+     *
+     * @param array $files
+     */
+    public function preScanFiles(array $files): void {
+        foreach ($files as $filePath) {
+            if (!file_exists($filePath) || !is_readable($filePath)) {
+                continue;
+            }
+
+            $content = file_get_contents($filePath);
+            $namespace = $this->extractNamespace($content);
+            $this->fileNamespaces[$filePath] = $namespace;
+
+            // Extract class declarations from this file
+            $lines = explode("\n", $content);
+            foreach ($lines as $lineNumber => $line) {
+                // Check for class declarations
+                if (preg_match('/^\s*class\s+([a-zA-Z_][a-zA-Z0-9_]*)/i', $line, $matches)) {
+                    $className = $matches[1];
+                    $this->declaredClasses[] = $className;
+
+                    if ($namespace) {
+                        $fullClassName = $namespace . '\\' . $className;
+                        $this->namespacedClasses[$fullClassName] = $className;
+                    }
+                }
+
+                // Check for interface declarations
+                if (preg_match('/^\s*interface\s+([a-zA-Z_][a-zA-Z0-9_]*)/i', $line, $matches)) {
+                    $interfaceName = $matches[1];
+                    $this->declaredClasses[] = $interfaceName;
+
+                    if ($namespace) {
+                        $fullInterfaceName = $namespace . '\\' . $interfaceName;
+                        $this->namespacedClasses[$fullInterfaceName] = $interfaceName;
+                    }
+                }
+
+                // Check for trait declarations
+                if (preg_match('/^\s*trait\s+([a-zA-Z_][a-zA-Z0-9_]*)/i', $line, $matches)) {
+                    $traitName = $matches[1];
+                    $this->declaredClasses[] = $traitName;
+
+                    if ($namespace) {
+                        $fullTraitName = $namespace . '\\' . $traitName;
+                        $this->namespacedClasses[$fullTraitName] = $traitName;
+                    }
+                }
+            }
+        }
+    }
     
     public function getName(): string {
         return 'Class Conflict Detector';
@@ -38,6 +94,10 @@ class ClassConflictDetector implements ErrorDetectorInterface {
         $content = file_get_contents($filePath);
         $lines = explode("\n", $content);
 
+        // Extract namespace information for this file
+        $currentNamespace = $this->extractNamespace($content);
+        $this->fileNamespaces[$filePath] = $currentNamespace;
+
         // Analyze the content to find class_exists() guarded blocks
         $guardedClasses = $this->findClassExistsGuardedClasses($content);
 
@@ -47,7 +107,7 @@ class ClassConflictDetector implements ErrorDetectorInterface {
             // Check for class declarations
             if (preg_match('/^\s*class\s+([a-zA-Z_][a-zA-Z0-9_]*)/i', $line, $matches)) {
                 $className = $matches[1];
-                $errors = array_merge($errors, $this->checkClassConflict($className, $filePath, $lineNumber));
+                $errors = array_merge($errors, $this->checkClassConflict($className, $filePath, $lineNumber, $currentNamespace));
             }
 
             // Check for interface declarations
@@ -70,7 +130,7 @@ class ClassConflictDetector implements ErrorDetectorInterface {
                     continue;
                 }
 
-                if ($this->isUndefinedClass($className)) {
+                if ($this->isUndefinedClass($className, $currentNamespace)) {
                     $exceptionReason = $this->exceptionManager->getClassExceptionReason($className, $this->detectedEcosystems);
 
                     if ($exceptionReason) {
@@ -105,9 +165,9 @@ class ClassConflictDetector implements ErrorDetectorInterface {
         return $errors;
     }
 
-    private function checkClassConflict(string $className, string $filePath, int $lineNumber): array {
+    private function checkClassConflict(string $className, string $filePath, int $lineNumber, string $namespace = ''): array {
         $errors = [];
-        
+
         // Check if class already exists
         if (class_exists($className, false)) {
             $errors[] = new FatalError(
@@ -120,7 +180,7 @@ class ClassConflictDetector implements ErrorDetectorInterface {
                 context: ['class' => $className]
             );
         }
-        
+
         // Check if it conflicts with WordPress core classes
         if (in_array($className, $this->wordpressClasses)) {
             $errors[] = new FatalError(
@@ -133,7 +193,7 @@ class ClassConflictDetector implements ErrorDetectorInterface {
                 context: ['class' => $className, 'type' => 'wordpress_core']
             );
         }
-        
+
         // Check if it conflicts with PHP built-in classes
         if ($this->isPHPBuiltinClass($className)) {
             $errors[] = new FatalError(
@@ -146,10 +206,16 @@ class ClassConflictDetector implements ErrorDetectorInterface {
                 context: ['class' => $className, 'type' => 'php_builtin']
             );
         }
-        
+
         // Track declared classes for future conflict detection
         $this->declaredClasses[] = $className;
-        
+
+        // Track namespaced classes
+        if ($namespace) {
+            $fullClassName = $namespace . '\\' . $className;
+            $this->namespacedClasses[$fullClassName] = $className;
+        }
+
         return $errors;
     }
 
@@ -313,7 +379,7 @@ class ClassConflictDetector implements ErrorDetectorInterface {
         return false;
     }
 
-    private function isUndefinedClass(string $className): bool {
+    private function isUndefinedClass(string $className, string $currentNamespace = ''): bool {
         // Skip built-in PHP classes and common keywords
         if ($this->isPHPBuiltinClass($className) ||
             in_array(strtolower($className), ['self', 'parent', 'static'])) {
@@ -332,6 +398,11 @@ class ClassConflictDetector implements ErrorDetectorInterface {
 
         // Skip if it's in our declared classes list
         if (in_array($className, $this->declaredClasses)) {
+            return false;
+        }
+
+        // Check if class exists in the same namespace
+        if ($currentNamespace && $this->isClassInNamespace($className, $currentNamespace)) {
             return false;
         }
 
@@ -404,6 +475,36 @@ class ClassConflictDetector implements ErrorDetectorInterface {
         ];
 
         return in_array($className, $builtinClasses) || class_exists($className, false);
+    }
+
+    /**
+     * Extract namespace from file content
+     */
+    private function extractNamespace(string $content): string {
+        // Remove comments to avoid false matches
+        $content = preg_replace('/\/\/.*$/m', '', $content);
+        $content = preg_replace('/\/\*.*?\*\//s', '', $content);
+
+        // Match namespace declaration
+        if (preg_match('/^\s*namespace\s+([a-zA-Z_][a-zA-Z0-9_\\\\]*)\s*;/m', $content, $matches)) {
+            return trim($matches[1]);
+        }
+
+        return '';
+    }
+
+    /**
+     * Check if a class exists in the given namespace
+     */
+    private function isClassInNamespace(string $className, string $namespace): bool {
+        if (!$namespace) {
+            return false;
+        }
+
+        $fullClassName = $namespace . '\\' . $className;
+
+        // Check if we've seen this class declared in our namespace tracking
+        return isset($this->namespacedClasses[$fullClassName]);
     }
 
     private function initializeWordPressClasses(): void {

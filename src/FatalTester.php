@@ -202,6 +202,8 @@ class FatalTester {
         foreach ($this->detectors as $detector) {
             if ($detector instanceof ClassConflictDetector) {
                 $detector->setDetectedEcosystems($detectedEcosystems);
+                // Pre-scan all files to build class registry for namespace resolution
+                $detector->preScanFiles($files);
             }
             if ($detector instanceof UndefinedFunctionDetector) {
                 $detector->setDetectedEcosystems($detectedEcosystems);
