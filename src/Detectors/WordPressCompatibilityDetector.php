@@ -141,15 +141,19 @@ class WordPressCompatibilityDetector implements ErrorDetectorInterface {
 
     private function checkHooksAndFilters(string $line, string $filePath, int $lineNumber, string $wpVersion): array {
         $errors = [];
-        
-        // Check for deprecated hooks
+
+        // Check for deprecated hooks - but be careful to distinguish between deprecated functions
+        // and valid action/filter hooks with similar names
         $deprecatedHooks = [
-            'wp_head' => ['deprecated' => '2.1.0', 'replacement' => 'wp_head action'],
-            'wp_footer' => ['deprecated' => '2.1.0', 'replacement' => 'wp_footer action'],
+            // Note: wp_head and wp_footer are valid action hooks, not deprecated
+            // The deprecated items were the wp_head() and wp_footer() FUNCTIONS, not the hooks
+            // We should only flag actual deprecated hooks here, not valid action hooks
         ];
-        
+
         foreach ($deprecatedHooks as $hook => $info) {
-            if (preg_match('/["\']' . preg_quote($hook, '/') . '["\']/', $line)) {
+            // Only flag if it's actually used as a hook name in add_action/add_filter/do_action/apply_filters
+            // and not just mentioned in a string
+            if (preg_match('/(?:add_action|add_filter|do_action|apply_filters)\s*\(\s*["\']' . preg_quote($hook, '/') . '["\']/', $line)) {
                 if (version_compare($wpVersion, $info['deprecated'], '>=')) {
                     $errors[] = new FatalError(
                         type: 'DEPRECATED_HOOK',
@@ -167,7 +171,7 @@ class WordPressCompatibilityDetector implements ErrorDetectorInterface {
                 }
             }
         }
-        
+
         return $errors;
     }
 
