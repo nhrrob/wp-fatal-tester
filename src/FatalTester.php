@@ -9,6 +9,7 @@ use NHRROB\WPFatalTester\Detectors\WordPressCompatibilityDetector;
 use NHRROB\WPFatalTester\Detectors\PHPVersionCompatibilityDetector;
 use NHRROB\WPFatalTester\Detectors\PluginEcosystemDetector;
 use NHRROB\WPFatalTester\Detectors\ThisContextDetector;
+use NHRROB\WPFatalTester\Detectors\TemplateMethodContextDetector;
 use NHRROB\WPFatalTester\Exceptions\DependencyExceptionManager;
 use NHRROB\WPFatalTester\Scanner\FileScanner;
 use NHRROB\WPFatalTester\Reporter\ErrorReporter;
@@ -38,6 +39,7 @@ class FatalTester {
             new WordPressCompatibilityDetector(),
             new PHPVersionCompatibilityDetector(),
             new ThisContextDetector(),
+            new TemplateMethodContextDetector(),
         ];
     }
 

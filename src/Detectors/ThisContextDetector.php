@@ -151,6 +151,7 @@ class ThisContextDetector implements ErrorDetectorInterface {
         // Methods that are commonly called in templates and could cause issues
         $problematicMethods = [
             'render_post_meta_dates',
+            'get_last_modified_date',
             'render_meta',
             'render_content',
             'render_title',
@@ -164,8 +165,8 @@ class ThisContextDetector implements ErrorDetectorInterface {
             'print_render_attribute_string',
             'add_render_attribute',
         ];
-        
-        return in_array($methodName, $problematicMethods) || 
+
+        return in_array($methodName, $problematicMethods) ||
                strpos($methodName, 'render_') === 0 ||
                strpos($methodName, 'get_') === 0 ||
                strpos($methodName, 'print_') === 0;
