@@ -13,6 +13,7 @@ class ClassConflictDetector implements ErrorDetectorInterface {
     private array $wordpressClasses = [];
     private DependencyExceptionManager $exceptionManager;
     private array $detectedEcosystems = [];
+    private ?string $pluginRoot = null;
 
     public function __construct(?DependencyExceptionManager $exceptionManager = null) {
         $this->exceptionManager = $exceptionManager ?? new DependencyExceptionManager();
@@ -26,6 +27,16 @@ class ClassConflictDetector implements ErrorDetectorInterface {
      */
     public function setDetectedEcosystems(array $ecosystems): void {
         $this->detectedEcosystems = $ecosystems;
+    }
+
+    /**
+     * Set the plugin root path for relative path calculation
+     *
+     * @param string $pluginRoot Absolute path to the plugin root directory
+     * @return void
+     */
+    public function setPluginRoot(string $pluginRoot): void {
+        $this->pluginRoot = $pluginRoot;
     }
 
     /**
@@ -165,7 +176,8 @@ class ClassConflictDetector implements ErrorDetectorInterface {
                         context: [
                             'class' => $className,
                             'detected_ecosystems' => $this->detectedEcosystems
-                        ]
+                        ],
+                        pluginRoot: $this->pluginRoot
                     );
                 }
             }
@@ -186,7 +198,8 @@ class ClassConflictDetector implements ErrorDetectorInterface {
                 line: $lineNumber,
                 severity: 'error',
                 suggestion: "Use a different class name or check for duplicate class declarations",
-                context: ['class' => $className]
+                context: ['class' => $className],
+                pluginRoot: $this->pluginRoot
             );
         }
 
@@ -199,7 +212,8 @@ class ClassConflictDetector implements ErrorDetectorInterface {
                 line: $lineNumber,
                 severity: 'error',
                 suggestion: "Use a different class name with a unique prefix to avoid conflicts",
-                context: ['class' => $className, 'type' => 'wordpress_core']
+                context: ['class' => $className, 'type' => 'wordpress_core'],
+                pluginRoot: $this->pluginRoot
             );
         }
 
@@ -212,7 +226,8 @@ class ClassConflictDetector implements ErrorDetectorInterface {
                 line: $lineNumber,
                 severity: 'error',
                 suggestion: "Use a different class name to avoid conflicts with PHP built-in classes",
-                context: ['class' => $className, 'type' => 'php_builtin']
+                context: ['class' => $className, 'type' => 'php_builtin'],
+                pluginRoot: $this->pluginRoot
             );
         }
 
@@ -239,7 +254,8 @@ class ClassConflictDetector implements ErrorDetectorInterface {
                 line: $lineNumber,
                 severity: 'error',
                 suggestion: "Use a different interface name or check for duplicate interface declarations",
-                context: ['interface' => $interfaceName]
+                context: ['interface' => $interfaceName],
+                pluginRoot: $this->pluginRoot
             );
         }
         
@@ -257,7 +273,8 @@ class ClassConflictDetector implements ErrorDetectorInterface {
                 line: $lineNumber,
                 severity: 'error',
                 suggestion: "Use a different trait name or check for duplicate trait declarations",
-                context: ['trait' => $traitName]
+                context: ['trait' => $traitName],
+                pluginRoot: $this->pluginRoot
             );
         }
         

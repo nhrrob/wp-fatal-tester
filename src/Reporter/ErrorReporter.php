@@ -47,23 +47,30 @@ class ErrorReporter {
     public function displayError(FatalError $error): void {
         $severityIcon = $this->getSeverityIcon($error->severity);
         $severityColor = $this->getSeverityColor($error->severity);
-        
-        $location = $this->formatLocation($error->file, $error->line);
-        
+
         echo "      {$severityIcon} " . $this->colorize($error->message, $severityColor) . "\n";
-        echo "        " . $this->colorize("Location: {$location}", 'dim') . "\n";
-        
+
+        // Display absolute path
+        $absolutePath = $error->getAbsoluteFilePath() . ':' . $error->line;
+        echo "        " . $this->colorize("Location: {$absolutePath}", 'dim') . "\n";
+
+        // Display relative path if different from absolute
+        $relativePath = $error->getRelativeFilePath() . ':' . $error->line;
+        if ($relativePath !== basename($error->file) . ':' . $error->line) {
+            echo "        " . $this->colorize("Relative: {$relativePath}", 'dim') . "\n";
+        }
+
         if ($error->suggestion) {
             echo "        " . $this->colorize("💡 Suggestion: {$error->suggestion}", 'blue') . "\n";
         }
-        
+
         if (!empty($error->context)) {
             $contextInfo = $this->formatContext($error->context);
             if ($contextInfo) {
                 echo "        " . $this->colorize("ℹ️  Context: {$contextInfo}", 'dim') . "\n";
             }
         }
-        
+
         echo "\n";
     }
 
@@ -178,18 +185,7 @@ class ErrorReporter {
         };
     }
 
-    private function formatLocation(string $file, int $line): string {
-        $relativePath = $this->getRelativePath($file);
-        return "{$relativePath}:{$line}";
-    }
 
-    private function getRelativePath(string $file): string {
-        $cwd = getcwd();
-        if (strpos($file, $cwd) === 0) {
-            return substr($file, strlen($cwd) + 1);
-        }
-        return basename($file);
-    }
 
     private function formatContext(array $context): string {
         $contextParts = [];

@@ -8,15 +8,26 @@ class WordPressCompatibilityDetector implements ErrorDetectorInterface {
     private array $deprecatedFunctions = [];
     private array $removedFunctions = [];
     private array $versionRequirements = [];
-    
+    private ?string $pluginRoot = null;
+
     public function __construct() {
         $this->initializeDeprecatedFunctions();
         $this->initializeRemovedFunctions();
         $this->initializeVersionRequirements();
     }
-    
+
     public function getName(): string {
         return 'WordPress Compatibility Detector';
+    }
+
+    /**
+     * Set the plugin root path for relative path calculation
+     *
+     * @param string $pluginRoot Absolute path to the plugin root directory
+     * @return void
+     */
+    public function setPluginRoot(string $pluginRoot): void {
+        $this->pluginRoot = $pluginRoot;
     }
 
     public function detect(string $filePath, string $phpVersion, string $wpVersion): array {
@@ -71,7 +82,8 @@ class WordPressCompatibilityDetector implements ErrorDetectorInterface {
                             'deprecated_version' => $deprecatedVersion,
                             'replacement' => $replacement,
                             'wp_version' => $wpVersion
-                        ]
+                        ],
+                        pluginRoot: $this->pluginRoot
                     );
                 }
             }
@@ -104,7 +116,8 @@ class WordPressCompatibilityDetector implements ErrorDetectorInterface {
                             'removed_version' => $removedVersion,
                             'replacement' => $replacement,
                             'wp_version' => $wpVersion
-                        ]
+                        ],
+                        pluginRoot: $this->pluginRoot
                     );
                 }
             }
@@ -130,7 +143,8 @@ class WordPressCompatibilityDetector implements ErrorDetectorInterface {
                             'function' => $function,
                             'required_version' => $requiredVersion,
                             'current_version' => $wpVersion
-                        ]
+                        ],
+                        pluginRoot: $this->pluginRoot
                     );
                 }
             }

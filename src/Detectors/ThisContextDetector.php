@@ -4,7 +4,7 @@ namespace NHRROB\WPFatalTester\Detectors;
 use NHRROB\WPFatalTester\Models\FatalError;
 
 class ThisContextDetector implements ErrorDetectorInterface {
-    
+
     private array $templatePatterns = [
         '/template/',
         '/templates/',
@@ -15,6 +15,8 @@ class ThisContextDetector implements ErrorDetectorInterface {
         '/partials/',
         '/Partials/',
     ];
+
+    private ?string $pluginRoot = null;
     
     private array $includePatterns = [
         'include',
@@ -25,6 +27,16 @@ class ThisContextDetector implements ErrorDetectorInterface {
     
     public function getName(): string {
         return '$this Context Detector';
+    }
+
+    /**
+     * Set the plugin root path for relative path calculation
+     *
+     * @param string $pluginRoot Absolute path to the plugin root directory
+     * @return void
+     */
+    public function setPluginRoot(string $pluginRoot): void {
+        $this->pluginRoot = $pluginRoot;
     }
 
     public function detect(string $filePath, string $phpVersion, string $wpVersion): array {
@@ -102,7 +114,8 @@ class ThisContextDetector implements ErrorDetectorInterface {
                             'method' => $methodName,
                             'template_file' => basename($filePath),
                             'line_content' => trim($line)
-                        ]
+                        ],
+                        pluginRoot: $this->pluginRoot
                     );
                 }
             }
@@ -122,7 +135,8 @@ class ThisContextDetector implements ErrorDetectorInterface {
                         'property' => $propertyName,
                         'template_file' => basename($filePath),
                         'line_content' => trim($line)
-                    ]
+                    ],
+                    pluginRoot: $this->pluginRoot
                 );
             }
         }

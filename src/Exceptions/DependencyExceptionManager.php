@@ -214,6 +214,7 @@ class DependencyExceptionManager {
                 'Essential_Addons_Elementor\\Classes\\Bootstrap',
                 'Essential_Addons_Elementor\\Classes\\WPDeveloper_Setup_Wizard',
                 'Essential_Addons_Elementor\\Classes\\Helper',
+                'Essential_Addons_Elementor\\Pro\\Classes\\Helper',
                 'Essential_Addons_Elementor\\Classes\\Plugin_Usage_Tracker',
                 'Woo_Cart_Shortcode', 'Woo_Product_List', 'Product_Grid',
 
@@ -223,6 +224,7 @@ class DependencyExceptionManager {
             'class_patterns' => [
                 'Elementor\\*',
                 'ElementorPro\\*',
+                'Essential_Addons_Elementor\\Pro\\*',
                 'Group_Control_*',
                 'Widget_*',
                 'Core\\*',

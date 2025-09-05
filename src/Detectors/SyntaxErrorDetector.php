@@ -8,9 +8,20 @@ class SyntaxErrorDetector implements ErrorDetectorInterface {
     private bool $insideHeredoc = false;
     private ?string $heredocEndMarker = null;
     private bool $insideMultiLineComment = false;
+    private ?string $pluginRoot = null;
 
     public function getName(): string {
         return 'Syntax Error Detector';
+    }
+
+    /**
+     * Set the plugin root path for relative path calculation
+     *
+     * @param string $pluginRoot Absolute path to the plugin root directory
+     * @return void
+     */
+    public function setPluginRoot(string $pluginRoot): void {
+        $this->pluginRoot = $pluginRoot;
     }
 
     public function detect(string $filePath, string $phpVersion, string $wpVersion): array {
@@ -45,7 +56,8 @@ class SyntaxErrorDetector implements ErrorDetectorInterface {
                     file: $filePath,
                     line: (int)$matches[2],
                     severity: 'error',
-                    suggestion: 'Fix the syntax error in the specified line'
+                    suggestion: 'Fix the syntax error in the specified line',
+                    pluginRoot: $this->pluginRoot
                 );
             } elseif (preg_match('/Fatal error: (.+) in .+ on line (\d+)/', $output, $matches)) {
                 $errors[] = new FatalError(
@@ -54,7 +66,8 @@ class SyntaxErrorDetector implements ErrorDetectorInterface {
                     file: $filePath,
                     line: (int)$matches[2],
                     severity: 'error',
-                    suggestion: 'Fix the fatal syntax error in the specified line'
+                    suggestion: 'Fix the fatal syntax error in the specified line',
+                    pluginRoot: $this->pluginRoot
                 );
             }
         }
@@ -92,10 +105,11 @@ class SyntaxErrorDetector implements ErrorDetectorInterface {
                     file: $filePath,
                     line: $lineNumber,
                     severity: 'warning',
-                    suggestion: 'Add semicolon at the end of the statement'
+                    suggestion: 'Add semicolon at the end of the statement',
+                    pluginRoot: $this->pluginRoot
                 );
             }
-            
+
             // Check for unmatched brackets
             if ($this->hasUnmatchedBrackets($line)) {
                 $errors[] = new FatalError(
@@ -104,7 +118,8 @@ class SyntaxErrorDetector implements ErrorDetectorInterface {
                     file: $filePath,
                     line: $lineNumber,
                     severity: 'warning',
-                    suggestion: 'Check bracket matching in this line'
+                    suggestion: 'Check bracket matching in this line',
+                    pluginRoot: $this->pluginRoot
                 );
             }
         }

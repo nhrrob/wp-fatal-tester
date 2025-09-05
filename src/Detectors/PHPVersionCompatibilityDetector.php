@@ -12,15 +12,26 @@ class PHPVersionCompatibilityDetector implements ErrorDetectorInterface {
     private ?string $heredocEndMarker = null;
     private bool $insideMultiLineComment = false;
     private array $newFeatures = [];
-    
+    private ?string $pluginRoot = null;
+
     public function __construct() {
         $this->initializeDeprecatedFeatures();
         $this->initializeRemovedFeatures();
         $this->initializeNewFeatures();
     }
-    
+
     public function getName(): string {
         return 'PHP Version Compatibility Detector';
+    }
+
+    /**
+     * Set the plugin root path for relative path calculation
+     *
+     * @param string $pluginRoot Absolute path to the plugin root directory
+     * @return void
+     */
+    public function setPluginRoot(string $pluginRoot): void {
+        $this->pluginRoot = $pluginRoot;
     }
 
     public function detect(string $filePath, string $phpVersion, string $wpVersion): array {
@@ -104,7 +115,8 @@ class PHPVersionCompatibilityDetector implements ErrorDetectorInterface {
                             'feature' => $feature,
                             'deprecated_version' => $deprecatedVersion,
                             'php_version' => $phpVersion
-                        ]
+                        ],
+                        pluginRoot: $this->pluginRoot
                     );
                 }
             }
@@ -140,7 +152,8 @@ class PHPVersionCompatibilityDetector implements ErrorDetectorInterface {
                             'feature' => $feature,
                             'removed_version' => $removedVersion,
                             'php_version' => $phpVersion
-                        ]
+                        ],
+                        pluginRoot: $this->pluginRoot
                     );
                 }
             }
@@ -182,7 +195,8 @@ class PHPVersionCompatibilityDetector implements ErrorDetectorInterface {
                             'feature' => $feature,
                             'required_version' => $requiredVersion,
                             'current_version' => $phpVersion
-                        ]
+                        ],
+                        pluginRoot: $this->pluginRoot
                     );
                 }
             }

@@ -198,8 +198,11 @@ class FatalTester {
             $detectedEcosystems = $options['force_ecosystem'];
         }
 
-        // Pass ecosystem information to detectors that support it
+        // Pass ecosystem information and plugin root to detectors that support it
         foreach ($this->detectors as $detector) {
+            // Set plugin root for all detectors
+            $detector->setPluginRoot($pluginPath);
+
             if ($detector instanceof ClassConflictDetector) {
                 $detector->setDetectedEcosystems($detectedEcosystems);
                 // Pre-scan all files to build class registry for namespace resolution

@@ -17,6 +17,7 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
     private DependencyExceptionManager $exceptionManager;
     private array $detectedEcosystems = [];
     private WordPressContextAnalyzer $contextAnalyzer;
+    private ?string $pluginRoot = null;
 
     public function __construct(?DependencyExceptionManager $exceptionManager = null) {
         $this->exceptionManager = $exceptionManager ?? new DependencyExceptionManager();
@@ -34,7 +35,17 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
     public function setDetectedEcosystems(array $ecosystems): void {
         $this->detectedEcosystems = $ecosystems;
     }
-    
+
+    /**
+     * Set the plugin root path for relative path calculation
+     *
+     * @param string $pluginRoot Absolute path to the plugin root directory
+     * @return void
+     */
+    public function setPluginRoot(string $pluginRoot): void {
+        $this->pluginRoot = $pluginRoot;
+    }
+
     public function getName(): string {
         return 'Undefined Function Detector';
     }
@@ -64,7 +75,7 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
 
             // Find function calls in the line
             $functionCalls = $this->extractFunctionCalls($line);
-            
+
             foreach ($functionCalls as $functionName) {
                 if ($this->isUndefinedFunction($functionName, $phpVersion, $wpVersion)) {
                     // Analyze context for WordPress admin functions
@@ -90,7 +101,8 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
                             'php_version' => $phpVersion,
                             'wp_version' => $wpVersion,
                             'wp_context' => $context
-                        ]
+                        ],
+                        pluginRoot: $this->pluginRoot
                     );
                 }
             }
@@ -146,8 +158,13 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
             return [];
         }
 
-        // Skip lines that are method definitions
-        if (preg_match('/^\s*(private|protected|public)\s+function\s+/', $lineWithoutComments)) {
+        // Skip lines that are method definitions (including static methods)
+        if (preg_match('/^\s*(private|protected|public)\s+(static\s+)?function\s+/', $lineWithoutComments)) {
+            return [];
+        }
+
+        // Skip standalone function definitions
+        if (preg_match('/^\s*function\s+/', $lineWithoutComments)) {
             return [];
         }
 
