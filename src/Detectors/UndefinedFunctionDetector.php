@@ -11,6 +11,9 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
     private array $wordpressAdminFunctions = [];
     private array $phpFunctions = [];
     private bool $insideScriptTag = false;
+    private bool $insideHeredoc = false;
+    private ?string $heredocEndMarker = null;
+    private bool $insideMultiLineComment = false;
     private DependencyExceptionManager $exceptionManager;
     private array $detectedEcosystems = [];
     private WordPressContextAnalyzer $contextAnalyzer;
@@ -45,14 +48,19 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
         $content = file_get_contents($filePath);
         $lines = explode("\n", $content);
 
-        // Reset script tag state for each file
+        // Reset all state variables for each file
         $this->insideScriptTag = false;
+        $this->insideHeredoc = false;
+        $this->heredocEndMarker = null;
+        $this->insideMultiLineComment = false;
 
         foreach ($lines as $lineNumber => $line) {
             $lineNumber++; // 1-based line numbers
 
-            // Update script tag state
+            // Update all parsing states
             $this->updateScriptTagState($line);
+            $this->updateHeredocState($line);
+            $this->updateMultiLineCommentState($line);
 
             // Find function calls in the line
             $functionCalls = $this->extractFunctionCalls($line);
@@ -94,69 +102,77 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
     private function extractFunctionCalls(string $line): array {
         $functions = [];
 
-        // Skip if we're inside a script tag
-        if ($this->insideScriptTag) {
+        // Skip if we're inside non-executable contexts
+        if ($this->insideScriptTag || $this->insideHeredoc || $this->insideMultiLineComment) {
             return [];
         }
 
-        // Remove comments first
-        $line = preg_replace('/\/\/.*$/', '', $line);
-        $line = preg_replace('/\/\*.*?\*\//', '', $line);
+        // Skip PHPDoc comments and documentation lines
+        if (preg_match('/^\s*\*/', $line) ||
+            preg_match('/^\s*\/\*\*/', $line) ||
+            preg_match('/^\s*\/\*/', $line) ||
+            preg_match('/^\s*\*\//', $line)) {
+            return [];
+        }
 
-        // Skip method calls (contains -> or ::) and JavaScript method calls (contains .)
-        if (strpos($line, '->') !== false || strpos($line, '::') !== false) {
+        // Remove single-line comments first (but preserve the line structure)
+        $lineWithoutComments = preg_replace('/\/\/.*$/', '', $line);
+        $lineWithoutComments = preg_replace('/\/\*.*?\*\//', '', $lineWithoutComments);
+
+        // Skip if line becomes empty after comment removal
+        if (trim($lineWithoutComments) === '') {
+            return [];
+        }
+
+        // Skip method calls (contains -> or ::)
+        if (strpos($lineWithoutComments, '->') !== false || strpos($lineWithoutComments, '::') !== false) {
             return [];
         }
 
         // Skip JavaScript code (enhanced detection)
-        if (preg_match('/\$\s*\(\s*["\']/', $line) ||
-            preg_match('/jQuery\s*\(/', $line) ||
-            preg_match('/<script[^>]*>/', $line) ||
-            preg_match('/echo\s+["\']<script/', $line) ||
-            preg_match('/\$\(["\'][^"\']*["\']/', $line)) {
+        if (preg_match('/\$\s*\(\s*["\']/', $lineWithoutComments) ||
+            preg_match('/jQuery\s*\(/', $lineWithoutComments) ||
+            preg_match('/<script[^>]*>/', $lineWithoutComments) ||
+            preg_match('/echo\s+["\']<script/', $lineWithoutComments) ||
+            preg_match('/\$\(["\'][^"\']*["\']/', $lineWithoutComments)) {
             return [];
         }
 
         // Skip CSS code (enhanced detection)
-        if (preg_match('/\{[^}]*\}/', $line) ||
-            preg_match('/:\s*(calc|rgba|rgb|hsl|hsla|linear-gradient|radial-gradient)\s*\(/', $line) ||
-            preg_match('/["\'].*\.(css|scss|sass|less).*["\']/', $line) ||
-            preg_match('/style\s*=\s*["\']/', $line)) {
+        if (preg_match('/\{[^}]*\}/', $lineWithoutComments) ||
+            preg_match('/:\s*(calc|rgba|rgb|hsl|hsla|linear-gradient|radial-gradient)\s*\(/', $lineWithoutComments) ||
+            preg_match('/["\'].*\.(css|scss|sass|less).*["\']/', $lineWithoutComments) ||
+            preg_match('/style\s*=\s*["\']/', $lineWithoutComments)) {
             return [];
         }
 
         // Skip lines that are method definitions
-        if (preg_match('/^\s*(private|protected|public)\s+function\s+/', $line)) {
+        if (preg_match('/^\s*(private|protected|public)\s+function\s+/', $lineWithoutComments)) {
             return [];
         }
 
         // Skip lines that are class definitions or other declarations
-        if (preg_match('/^\s*(class|interface|trait|namespace|use)\s+/', $line)) {
+        if (preg_match('/^\s*(class|interface|trait|namespace|use)\s+/', $lineWithoutComments)) {
             return [];
         }
 
         // Skip lines that contain only strings or documentation
-        if (preg_match('/^\s*["\'].*["\'][\s,;]*$/', $line)) {
-            return [];
-        }
-
-        // Skip heredoc/nowdoc content
-        if (preg_match('/<<<["\']?\w+["\']?/', $line)) {
+        if (preg_match('/^\s*["\'].*["\'][\s,;]*$/', $lineWithoutComments)) {
             return [];
         }
 
         // Skip lines with class instantiations, exception handling, and type declarations
-        if (preg_match('/\bnew\s+\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*\s*\(/', $line) ||
-            preg_match('/\bcatch\s*\(\s*\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*\s/', $line) ||
-            preg_match('/\bthrow\s+new\s+\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*\s*\(/', $line) ||
-            preg_match('/\bextends\s+\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*/', $line) ||
-            preg_match('/\bimplements\s+\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*/', $line) ||
-            preg_match('/\binstanceof\s+\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*/', $line)) {
+        if (preg_match('/\bnew\s+\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*\s*\(/', $lineWithoutComments) ||
+            preg_match('/\bcatch\s*\(\s*\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*\s/', $lineWithoutComments) ||
+            preg_match('/\bthrow\s+new\s+\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*\s*\(/', $lineWithoutComments) ||
+            preg_match('/\bextends\s+\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*/', $lineWithoutComments) ||
+            preg_match('/\bimplements\s+\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*/', $lineWithoutComments) ||
+            preg_match('/\binstanceof\s+\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*/', $lineWithoutComments)) {
             return [];
         }
 
         // Remove string literals to avoid matching function names inside strings
-        $lineWithoutStrings = preg_replace('/(["\'])(?:(?=(\\\\?))\2.)*?\1/', '', $line);
+        $lineWithoutStrings = preg_replace('/(["\'])(?:(?=(\\\\?))\2.)*?\1/', '', $lineWithoutComments);
 
         // Match function calls: function_name( but exclude JavaScript method calls like .method(
         // Also exclude class instantiations with namespaces like new \ClassName() or new Namespace\ClassName()
@@ -364,6 +380,36 @@ class UndefinedFunctionDetector implements ErrorDetectorInterface {
         // Check if we're exiting a script tag (including within echo statements)
         if (preg_match('/<\/script>/', $line)) {
             $this->insideScriptTag = false;
+        }
+    }
+
+    private function updateHeredocState(string $line): void {
+        // If we're already inside a heredoc, check for the end marker
+        if ($this->insideHeredoc && $this->heredocEndMarker !== null) {
+            // Check if this line contains only the end marker (possibly with whitespace)
+            if (preg_match('/^\s*' . preg_quote($this->heredocEndMarker, '/') . '\s*;?\s*$/', $line)) {
+                $this->insideHeredoc = false;
+                $this->heredocEndMarker = null;
+            }
+            return;
+        }
+
+        // Check if we're starting a heredoc or nowdoc
+        if (preg_match('/<<<\s*(["\']?)(\w+)\1\s*$/', $line, $matches)) {
+            $this->insideHeredoc = true;
+            $this->heredocEndMarker = $matches[2];
+        }
+    }
+
+    private function updateMultiLineCommentState(string $line): void {
+        // Check if we're starting a multi-line comment
+        if (preg_match('/\/\*/', $line) && !preg_match('/\/\*.*?\*\//', $line)) {
+            $this->insideMultiLineComment = true;
+        }
+
+        // Check if we're ending a multi-line comment
+        if ($this->insideMultiLineComment && preg_match('/\*\//', $line)) {
+            $this->insideMultiLineComment = false;
         }
     }
 }

@@ -8,6 +8,9 @@ class PHPVersionCompatibilityDetector implements ErrorDetectorInterface {
     private array $deprecatedFeatures = [];
     private array $removedFeatures = [];
     private bool $insideScriptTag = false;
+    private bool $insideHeredoc = false;
+    private ?string $heredocEndMarker = null;
+    private bool $insideMultiLineComment = false;
     private array $newFeatures = [];
     
     public function __construct() {
@@ -29,12 +32,25 @@ class PHPVersionCompatibilityDetector implements ErrorDetectorInterface {
         $content = file_get_contents($filePath);
         $lines = explode("\n", $content);
 
-        // Reset script tag state for each file
+        // Reset all state variables for each file
         $this->insideScriptTag = false;
+        $this->insideHeredoc = false;
+        $this->heredocEndMarker = null;
+        $this->insideMultiLineComment = false;
 
         foreach ($lines as $lineNumber => $line) {
             $lineNumber++; // 1-based line numbers
-            
+
+            // Update parsing states
+            $this->updateScriptTagState($line);
+            $this->updateHeredocState($line);
+            $this->updateMultiLineCommentState($line);
+
+            // Skip if we're inside non-executable contexts
+            if ($this->insideHeredoc || $this->insideMultiLineComment) {
+                continue;
+            }
+
             // Check for deprecated features
             $errors = array_merge($errors, $this->checkDeprecatedFeatures($line, $filePath, $lineNumber, $phpVersion));
             
@@ -65,8 +81,18 @@ class PHPVersionCompatibilityDetector implements ErrorDetectorInterface {
         foreach ($this->deprecatedFeatures as $feature => $info) {
             if (preg_match($info['pattern'], $line)) {
                 $deprecatedVersion = $info['deprecated'];
-                
-                if (version_compare($phpVersion, $deprecatedVersion, '>=')) {
+
+                // Check if this feature is also in the removed features list
+                // If it's removed in the current PHP version, skip the deprecated warning
+                $isRemoved = false;
+                if (isset($this->removedFeatures[$feature])) {
+                    $removedVersion = $this->removedFeatures[$feature]['removed'];
+                    if (version_compare($phpVersion, $removedVersion, '>=')) {
+                        $isRemoved = true;
+                    }
+                }
+
+                if (!$isRemoved && version_compare($phpVersion, $deprecatedVersion, '>=')) {
                     $errors[] = new FatalError(
                         type: 'DEPRECATED_PHP_FEATURE',
                         message: "{$feature} is deprecated since PHP {$deprecatedVersion}",
@@ -327,6 +353,36 @@ class PHPVersionCompatibilityDetector implements ErrorDetectorInterface {
                preg_match('/echo\s+["\']<script/', $line) ||
                preg_match('/\$\(["\'][^"\']*["\']/', $line) ||
                preg_match('/\.each\s*\(/', $line);
+    }
+
+    private function updateHeredocState(string $line): void {
+        // If we're already inside a heredoc, check for the end marker
+        if ($this->insideHeredoc && $this->heredocEndMarker !== null) {
+            // Check if this line contains only the end marker (possibly with whitespace)
+            if (preg_match('/^\s*' . preg_quote($this->heredocEndMarker, '/') . '\s*;?\s*$/', $line)) {
+                $this->insideHeredoc = false;
+                $this->heredocEndMarker = null;
+            }
+            return;
+        }
+
+        // Check if we're starting a heredoc or nowdoc
+        if (preg_match('/<<<\s*(["\']?)(\w+)\1\s*$/', $line, $matches)) {
+            $this->insideHeredoc = true;
+            $this->heredocEndMarker = $matches[2];
+        }
+    }
+
+    private function updateMultiLineCommentState(string $line): void {
+        // Check if we're starting a multi-line comment
+        if (preg_match('/\/\*/', $line) && !preg_match('/\/\*.*?\*\//', $line)) {
+            $this->insideMultiLineComment = true;
+        }
+
+        // Check if we're ending a multi-line comment
+        if ($this->insideMultiLineComment && preg_match('/\*\//', $line)) {
+            $this->insideMultiLineComment = false;
+        }
     }
 
     /**

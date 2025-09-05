@@ -4,7 +4,11 @@ namespace NHRROB\WPFatalTester\Detectors;
 use NHRROB\WPFatalTester\Models\FatalError;
 
 class SyntaxErrorDetector implements ErrorDetectorInterface {
-    
+
+    private bool $insideHeredoc = false;
+    private ?string $heredocEndMarker = null;
+    private bool $insideMultiLineComment = false;
+
     public function getName(): string {
         return 'Syntax Error Detector';
     }
@@ -62,10 +66,24 @@ class SyntaxErrorDetector implements ErrorDetectorInterface {
         $errors = [];
         $content = file_get_contents($filePath);
         $lines = explode("\n", $content);
-        
+
+        // Reset state variables for each file
+        $this->insideHeredoc = false;
+        $this->heredocEndMarker = null;
+        $this->insideMultiLineComment = false;
+
         foreach ($lines as $lineNumber => $line) {
             $lineNumber++; // 1-based line numbers
-            
+
+            // Update parsing states
+            $this->updateHeredocState($line);
+            $this->updateMultiLineCommentState($line);
+
+            // Skip if we're inside non-executable contexts
+            if ($this->insideHeredoc || $this->insideMultiLineComment) {
+                continue;
+            }
+
             // Check for missing semicolons (basic check)
             if ($this->isMissingSemicolon($line)) {
                 $errors[] = new FatalError(
@@ -113,6 +131,16 @@ class SyntaxErrorDetector implements ErrorDetectorInterface {
             return false;
         }
 
+        // Skip HEREDOC/NOWDOC start lines
+        if (preg_match('/<<<\s*(["\']?)(\w+)\1\s*$/', $line)) {
+            return false;
+        }
+
+        // Skip PHPDoc comments
+        if (preg_match('/^\s*\*\s*@/', $line)) {
+            return false;
+        }
+
         // Skip array declarations and other complex structures
         if (preg_match('/^\s*[\[\(]/', $line) || preg_match('/[\]\)]\s*$/', $line)) {
             return false;
@@ -144,12 +172,17 @@ class SyntaxErrorDetector implements ErrorDetectorInterface {
         // Check if line should end with semicolon but doesn't (be more conservative)
         // Only flag simple variable assignments and basic statements
         if (preg_match('/^\s*\$\w+\s*=\s*[^=\(\[\{]*[^;{\},\(\[\]]\s*$/', $line) ||
-            preg_match('/^\s*(echo|print|return|throw)\s+[^;{\}]*[^;{\},]\s*$/', $line) ||
+            preg_match('/^\s*(echo|print|throw)\s+[^;{\}]*[^;{\},]\s*$/', $line) ||
             preg_match('/^\s*\w+\s*\([^)]*\)\s*[^;{\},]\s*$/', $line)) {
             // Additional check: make sure it's not part of a multi-line structure
             if (!preg_match('/\s*(function|class|if|while|for|foreach)\s*\(/', $line)) {
                 return true;
             }
+        }
+
+        // Skip multi-line return statements that end with logical operators
+        if (preg_match('/^\s*return\s+.*(\|\||&&|or|and)\s*$/', $line)) {
+            return false;
         }
 
         return false;
@@ -210,5 +243,35 @@ class SyntaxErrorDetector implements ErrorDetectorInterface {
         }
 
         return false;
+    }
+
+    private function updateHeredocState(string $line): void {
+        // If we're already inside a heredoc, check for the end marker
+        if ($this->insideHeredoc && $this->heredocEndMarker !== null) {
+            // Check if this line contains only the end marker (possibly with whitespace)
+            if (preg_match('/^\s*' . preg_quote($this->heredocEndMarker, '/') . '\s*;?\s*$/', $line)) {
+                $this->insideHeredoc = false;
+                $this->heredocEndMarker = null;
+            }
+            return;
+        }
+
+        // Check if we're starting a heredoc or nowdoc
+        if (preg_match('/<<<\s*(["\']?)(\w+)\1\s*$/', $line, $matches)) {
+            $this->insideHeredoc = true;
+            $this->heredocEndMarker = $matches[2];
+        }
+    }
+
+    private function updateMultiLineCommentState(string $line): void {
+        // Check if we're starting a multi-line comment
+        if (preg_match('/\/\*/', $line) && !preg_match('/\/\*.*?\*\//', $line)) {
+            $this->insideMultiLineComment = true;
+        }
+
+        // Check if we're ending a multi-line comment
+        if ($this->insideMultiLineComment && preg_match('/\*\//', $line)) {
+            $this->insideMultiLineComment = false;
+        }
     }
 }
