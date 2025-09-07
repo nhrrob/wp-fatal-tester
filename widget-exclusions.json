@@ -1,0 +1,84 @@
+{
+  "widget_exclusions": {
+    "elementor": {
+      "content_timeline": {
+        "status": "temporary_exclude",
+        "reason": "No load more functionality currently, but may be added in future",
+        "methods": ["render_post_meta_dates", "get_last_modified_date"],
+        "error_types": ["TEMPLATE_METHOD_CONTEXT_ERROR"],
+        "review_date": "2024-12-01",
+        "future_proof": true,
+        "notes": "Monitor Elementor Pro updates for load more functionality"
+      },
+      "post_carousel": {
+        "status": "exclude",
+        "reason": "Carousel widgets typically do not have load more functionality",
+        "methods": ["*"],
+        "error_types": ["TEMPLATE_METHOD_CONTEXT_ERROR"],
+        "future_proof": false,
+        "notes": "Carousels show fixed number of items, no pagination expected"
+      },
+      "product_carousel": {
+        "status": "exclude",
+        "reason": "Carousel widgets typically do not have load more functionality",
+        "methods": ["*"],
+        "error_types": ["TEMPLATE_METHOD_CONTEXT_ERROR"],
+        "future_proof": false
+      },
+      "media_carousel": {
+        "status": "exclude",
+        "reason": "Carousel widgets typically do not have load more functionality",
+        "methods": ["*"],
+        "error_types": ["TEMPLATE_METHOD_CONTEXT_ERROR"],
+        "future_proof": false
+      },
+      "testimonial_carousel": {
+        "status": "exclude",
+        "reason": "Carousel widgets typically do not have load more functionality",
+        "methods": ["*"],
+        "error_types": ["TEMPLATE_METHOD_CONTEXT_ERROR"],
+        "future_proof": false
+      },
+      "logo_carousel": {
+        "status": "exclude",
+        "reason": "Carousel widgets typically do not have load more functionality",
+        "methods": ["*"],
+        "error_types": ["TEMPLATE_METHOD_CONTEXT_ERROR"],
+        "future_proof": false
+      },
+      "post_list": {
+        "status": "include",
+        "reason": "Has load more functionality, errors are legitimate",
+        "methods": [],
+        "error_types": [],
+        "future_proof": true,
+        "notes": "This widget has AJAX load more, all errors should be reported"
+      },
+      "post_grid": {
+        "status": "include",
+        "reason": "Has load more functionality, errors are legitimate",
+        "methods": [],
+        "error_types": [],
+        "future_proof": true,
+        "notes": "This widget has AJAX load more, all errors should be reported"
+      }
+    }
+  },
+  "reporting_mode": "fatal_only",
+  "configuration_info": {
+    "version": "1.0",
+    "description": "Widget exclusion configuration for WordPress Fatal Tester",
+    "last_updated": "2024-09-06",
+    "documentation": "https://github.com/nhrrob/wp-fatal-tester/docs/widget-exclusions.md"
+  },
+  "reporting_modes": {
+    "fatal_only": "Show only fatal errors (exclude known false positives)",
+    "all_errors": "Show all errors including excluded items for debugging",
+    "debug_mode": "Show all errors with exclusion status annotations"
+  },
+  "widget_status_types": {
+    "include": "Always report errors for this widget (has load more functionality)",
+    "exclude": "Never report errors for this widget (no load more functionality)",
+    "temporary_exclude": "Temporarily exclude but review periodically (future-proof)"
+  }
+}

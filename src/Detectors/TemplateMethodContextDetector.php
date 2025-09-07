@@ -2,6 +2,7 @@
 namespace NHRROB\WPFatalTester\Detectors;
 
 use NHRROB\WPFatalTester\Models\FatalError;
+use NHRROB\WPFatalTester\Exceptions\WidgetExclusionManager;
 
 class TemplateMethodContextDetector implements ErrorDetectorInterface {
 
@@ -21,7 +22,9 @@ class TemplateMethodContextDetector implements ErrorDetectorInterface {
     ];
 
     private ?string $pluginRoot = null;
-    
+    private WidgetExclusionManager $widgetExclusionManager;
+    private array $detectedEcosystems = [];
+
     /**
      * EA Pro Post_List widget specific methods that cause AJAX load more issues
      */
@@ -29,6 +32,31 @@ class TemplateMethodContextDetector implements ErrorDetectorInterface {
         'render_post_meta_dates',
         'get_last_modified_date',
     ];
+
+    public function __construct(?string $configFile = null) {
+        $this->widgetExclusionManager = new WidgetExclusionManager($configFile);
+    }
+
+    /**
+     * Set detected ecosystems for widget exclusion context
+     */
+    public function setDetectedEcosystems(array $ecosystems): void {
+        $this->detectedEcosystems = $ecosystems;
+    }
+
+    /**
+     * Get the widget exclusion manager for external configuration
+     */
+    public function getWidgetExclusionManager(): WidgetExclusionManager {
+        return $this->widgetExclusionManager;
+    }
+
+    /**
+     * Set the reporting mode for widget exclusions
+     */
+    public function setReportingMode(string $mode): void {
+        $this->widgetExclusionManager->setReportingMode($mode);
+    }
     
     /**
      * Common widget methods that may cause context issues
@@ -136,61 +164,59 @@ class TemplateMethodContextDetector implements ErrorDetectorInterface {
                 
                 // Check for EA Pro Post_List specific methods
                 if (in_array($methodName, $this->eaProPostListMethods)) {
-                    $errors[] = new FatalError(
-                        type: 'TEMPLATE_METHOD_CONTEXT_ERROR',
-                        message: "EA Pro Post_List widget method '\$this->{$methodName}()' called in template may cause fatal error during AJAX load more operations",
-                        file: $filePath,
-                        line: $lineNumber,
-                        severity: 'error',
-                        suggestion: $this->getEAProSpecificSuggestion($methodName),
-                        context: [
-                            'method' => $methodName,
-                            'template_file' => basename($filePath),
-                            'line_content' => trim($line),
-                            'issue_type' => 'ea_pro_ajax_context',
-                            'widget_type' => 'Post_List',
-                            'description' => 'This method exists only in the widget class context and will not be available when the template is included during AJAX load more operations'
-                        ],
-                        pluginRoot: $this->pluginRoot
+                    $error = $this->createWidgetMethodError(
+                        $methodName,
+                        $filePath,
+                        $lineNumber,
+                        $line,
+                        'post_list',
+                        'ea_pro_ajax_context',
+                        'error',
+                        "EA Pro Post_List widget method '\$this->{$methodName}()' called in template may cause fatal error during AJAX load more operations",
+                        $this->getEAProSpecificSuggestion($methodName)
                     );
+
+                    if ($error) {
+                        $errors[] = $error;
+                    }
                 }
                 // Check for other widget context methods
                 elseif (in_array($methodName, $this->widgetContextMethods)) {
-                    $errors[] = new FatalError(
-                        type: 'TEMPLATE_METHOD_CONTEXT_ERROR',
-                        message: "Widget method '\$this->{$methodName}()' called in template may cause fatal error when template is included in different contexts",
-                        file: $filePath,
-                        line: $lineNumber,
-                        severity: 'warning',
-                        suggestion: $this->getGeneralWidgetSuggestion($methodName),
-                        context: [
-                            'method' => $methodName,
-                            'template_file' => basename($filePath),
-                            'line_content' => trim($line),
-                            'issue_type' => 'widget_context',
-                            'description' => 'This method may not be available when the template is included outside of the widget class context'
-                        ],
-                        pluginRoot: $this->pluginRoot
+                    $widgetType = $this->detectWidgetTypeFromPath($filePath);
+                    $error = $this->createWidgetMethodError(
+                        $methodName,
+                        $filePath,
+                        $lineNumber,
+                        $line,
+                        $widgetType,
+                        'widget_context',
+                        'warning',
+                        "Widget method '\$this->{$methodName}()' called in template may cause fatal error when template is included in different contexts",
+                        $this->getGeneralWidgetSuggestion($methodName)
                     );
+
+                    if ($error) {
+                        $errors[] = $error;
+                    }
                 }
                 // Check for methods that follow problematic patterns
                 elseif ($this->isProblematicMethodPattern($methodName)) {
-                    $errors[] = new FatalError(
-                        type: 'TEMPLATE_METHOD_CONTEXT_ERROR',
-                        message: "Method '\$this->{$methodName}()' in template follows a pattern that may cause context errors",
-                        file: $filePath,
-                        line: $lineNumber,
-                        severity: 'info',
-                        suggestion: "Verify that this method is available in all contexts where this template might be included, especially during AJAX operations",
-                        context: [
-                            'method' => $methodName,
-                            'template_file' => basename($filePath),
-                            'line_content' => trim($line),
-                            'issue_type' => 'potential_context',
-                            'description' => 'Method name pattern suggests it might be widget-specific'
-                        ],
-                        pluginRoot: $this->pluginRoot
+                    $widgetType = $this->detectWidgetTypeFromPath($filePath);
+                    $error = $this->createWidgetMethodError(
+                        $methodName,
+                        $filePath,
+                        $lineNumber,
+                        $line,
+                        $widgetType,
+                        'potential_context',
+                        'info',
+                        "Method '\$this->{$methodName}()' in template follows a pattern that may cause context errors",
+                        "Verify that this method is available in all contexts where this template might be included, especially during AJAX operations"
                     );
+
+                    if ($error) {
+                        $errors[] = $error;
+                    }
                 }
             }
         }
@@ -198,6 +224,99 @@ class TemplateMethodContextDetector implements ErrorDetectorInterface {
         return $errors;
     }
     
+    /**
+     * Create a widget method error with exclusion checking
+     */
+    private function createWidgetMethodError(
+        string $methodName,
+        string $filePath,
+        int $lineNumber,
+        string $line,
+        string $widgetType,
+        string $issueType,
+        string $severity,
+        string $message,
+        string $suggestion
+    ): ?FatalError {
+        $errorType = 'TEMPLATE_METHOD_CONTEXT_ERROR';
+
+        // Check if this error should be excluded
+        foreach ($this->detectedEcosystems as $ecosystem) {
+            $exclusionResult = $this->widgetExclusionManager->shouldExcludeError(
+                $ecosystem,
+                $widgetType,
+                $methodName,
+                $errorType
+            );
+
+            // If widget exclusion manager says to show the error, create it
+            if ($this->widgetExclusionManager->shouldShowError($exclusionResult)) {
+                $context = [
+                    'method' => $methodName,
+                    'template_file' => basename($filePath),
+                    'line_content' => trim($line),
+                    'issue_type' => $issueType,
+                    'widget_type' => $widgetType,
+                    'description' => 'This method exists only in the widget class context and will not be available when the template is included during AJAX load more operations'
+                ];
+
+                // Add exclusion information in debug mode
+                if ($this->widgetExclusionManager->getReportingMode() === 'debug_mode') {
+                    $context['exclusion_info'] = $exclusionResult;
+                }
+
+                return new FatalError(
+                    type: $errorType,
+                    message: $message,
+                    file: $filePath,
+                    line: $lineNumber,
+                    severity: $severity,
+                    suggestion: $suggestion,
+                    context: $context,
+                    pluginRoot: $this->pluginRoot
+                );
+            }
+        }
+
+        return null; // Error was excluded
+    }
+
+    /**
+     * Detect widget type from file path
+     */
+    private function detectWidgetTypeFromPath(string $filePath): string {
+        $path = strtolower($filePath);
+
+        // Common widget type patterns
+        $widgetPatterns = [
+            'post-list' => 'post_list',
+            'post_list' => 'post_list',
+            'post-grid' => 'post_grid',
+            'post_grid' => 'post_grid',
+            'content-timeline' => 'content_timeline',
+            'content_timeline' => 'content_timeline',
+            'post-carousel' => 'post_carousel',
+            'post_carousel' => 'post_carousel',
+            'product-carousel' => 'product_carousel',
+            'product_carousel' => 'product_carousel',
+            'media-carousel' => 'media_carousel',
+            'media_carousel' => 'media_carousel',
+            'testimonial-carousel' => 'testimonial_carousel',
+            'testimonial_carousel' => 'testimonial_carousel',
+            'logo-carousel' => 'logo_carousel',
+            'logo_carousel' => 'logo_carousel',
+        ];
+
+        foreach ($widgetPatterns as $pattern => $widgetType) {
+            if (strpos($path, $pattern) !== false) {
+                return $widgetType;
+            }
+        }
+
+        // Default to unknown widget type
+        return 'unknown_widget';
+    }
+
     /**
      * Get EA Pro specific suggestion for the method
      */

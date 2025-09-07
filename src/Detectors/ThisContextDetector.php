@@ -2,6 +2,7 @@
 namespace NHRROB\WPFatalTester\Detectors;
 
 use NHRROB\WPFatalTester\Models\FatalError;
+use NHRROB\WPFatalTester\Exceptions\WidgetExclusionManager;
 
 class ThisContextDetector implements ErrorDetectorInterface {
 
@@ -17,6 +18,8 @@ class ThisContextDetector implements ErrorDetectorInterface {
     ];
 
     private ?string $pluginRoot = null;
+    private WidgetExclusionManager $widgetExclusionManager;
+    private array $detectedEcosystems = [];
     
     private array $includePatterns = [
         'include',
@@ -24,9 +27,27 @@ class ThisContextDetector implements ErrorDetectorInterface {
         'require',
         'require_once',
     ];
-    
+
+    public function __construct(?string $configFile = null) {
+        $this->widgetExclusionManager = new WidgetExclusionManager($configFile);
+    }
+
     public function getName(): string {
         return '$this Context Detector';
+    }
+
+    /**
+     * Set detected ecosystems for widget exclusion context
+     */
+    public function setDetectedEcosystems(array $ecosystems): void {
+        $this->detectedEcosystems = $ecosystems;
+    }
+
+    /**
+     * Get the widget exclusion manager for external configuration
+     */
+    public function getWidgetExclusionManager(): WidgetExclusionManager {
+        return $this->widgetExclusionManager;
     }
 
     /**
@@ -103,41 +124,39 @@ class ThisContextDetector implements ErrorDetectorInterface {
                 
                 // Check if this is a method call that could be problematic
                 if ($this->isPotentiallyProblematicMethod($methodName)) {
-                    $errors[] = new FatalError(
-                        type: 'THIS_CONTEXT_ERROR',
-                        message: "Usage of '\$this->{$methodName}()' in template file may cause fatal error when included in different contexts",
-                        file: $filePath,
-                        line: $lineNumber,
-                        severity: 'error',
-                        suggestion: "Consider using static methods, passing the object as a parameter, or checking if \$this is available before use",
-                        context: [
-                            'method' => $methodName,
-                            'template_file' => basename($filePath),
-                            'line_content' => trim($line)
-                        ],
-                        pluginRoot: $this->pluginRoot
+                    $error = $this->createWidgetAwareError(
+                        $filePath,
+                        $lineNumber,
+                        $line,
+                        $methodName,
+                        'method',
+                        "Usage of '\$this->{$methodName}()' in template file may cause fatal error when included in different contexts",
+                        "Consider using static methods, passing the object as a parameter, or checking if \$this is available before use"
                     );
+
+                    if ($error) {
+                        $errors[] = $error;
+                    }
                 }
             }
             
             // Check for $this property access
             if (preg_match('/\$this\s*->\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*(?!\()/', $line, $matches)) {
                 $propertyName = $matches[1];
-                
-                $errors[] = new FatalError(
-                    type: 'THIS_CONTEXT_ERROR',
-                    message: "Usage of '\$this->{$propertyName}' in template file may cause fatal error when included in different contexts",
-                    file: $filePath,
-                    line: $lineNumber,
-                    severity: 'error',
-                    suggestion: "Consider passing the property value as a variable to the template or checking if \$this is available before use",
-                    context: [
-                        'property' => $propertyName,
-                        'template_file' => basename($filePath),
-                        'line_content' => trim($line)
-                    ],
-                    pluginRoot: $this->pluginRoot
+
+                $error = $this->createWidgetAwareError(
+                    $filePath,
+                    $lineNumber,
+                    $line,
+                    $propertyName,
+                    'property',
+                    "Usage of '\$this->{$propertyName}' in template file may cause fatal error when included in different contexts",
+                    "Consider passing the property value as a variable to the template or checking if \$this is available before use"
                 );
+
+                if ($error) {
+                    $errors[] = $error;
+                }
             }
         }
         
@@ -189,5 +208,119 @@ class ThisContextDetector implements ErrorDetectorInterface {
         }
         
         return false;
+    }
+
+    /**
+     * Create a widget-aware error that respects exclusion rules
+     */
+    private function createWidgetAwareError(
+        string $filePath,
+        int $lineNumber,
+        string $line,
+        string $memberName,
+        string $memberType,
+        string $message,
+        string $suggestion
+    ): ?FatalError {
+        $errorType = 'THIS_CONTEXT_ERROR';
+        $widgetType = $this->detectWidgetTypeFromPath($filePath);
+
+        // Default exclusion result
+        $exclusionResult = [
+            'exclude' => false,
+            'reason' => 'No ecosystem detected',
+            'status' => 'unknown',
+            'future_proof' => false
+        ];
+
+        // Check if this error should be excluded for any detected ecosystem
+        if (!empty($this->detectedEcosystems)) {
+            foreach ($this->detectedEcosystems as $ecosystem) {
+                $currentExclusionResult = $this->widgetExclusionManager->shouldExcludeError(
+                    $ecosystem,
+                    $widgetType,
+                    $memberName,
+                    $errorType
+                );
+
+                // If any ecosystem says to exclude this error, exclude it
+                if ($currentExclusionResult['exclude']) {
+                    $exclusionResult = $currentExclusionResult;
+                    break;
+                }
+            }
+        }
+
+        // Apply the reporting mode logic
+        $finalShouldShow = $this->widgetExclusionManager->shouldShowError($exclusionResult);
+
+        // Only create the error if we should show it
+        if ($finalShouldShow) {
+            $context = [
+                $memberType => $memberName,
+                'template_file' => basename($filePath),
+                'line_content' => trim($line),
+                'widget_type' => $widgetType
+            ];
+
+            // Add exclusion information in debug mode
+            if ($this->widgetExclusionManager->getReportingMode() === 'debug_mode') {
+                $context['exclusion_info'] = $exclusionResult;
+                $context['ecosystems'] = $this->detectedEcosystems;
+            }
+
+            return new FatalError(
+                type: $errorType,
+                message: $message,
+                file: $filePath,
+                line: $lineNumber,
+                severity: 'error',
+                suggestion: $suggestion,
+                context: $context,
+                pluginRoot: $this->pluginRoot
+            );
+        }
+
+        return null; // Error was excluded
+    }
+
+    /**
+     * Detect widget type from file path
+     */
+    private function detectWidgetTypeFromPath(string $filePath): string {
+        $path = strtolower($filePath);
+
+        // Common widget type patterns
+        $widgetPatterns = [
+            'post-list' => 'post_list',
+            'post_list' => 'post_list',
+            'post-grid' => 'post_grid',
+            'post_grid' => 'post_grid',
+            'content-timeline' => 'content_timeline',
+            'content_timeline' => 'content_timeline',
+            'post-carousel' => 'post_carousel',
+            'post_carousel' => 'post_carousel',
+            'product-carousel' => 'product_carousel',
+            'product_carousel' => 'product_carousel',
+            'media-carousel' => 'media_carousel',
+            'media_carousel' => 'media_carousel',
+            'testimonial-carousel' => 'testimonial_carousel',
+            'testimonial_carousel' => 'testimonial_carousel',
+            'logo-carousel' => 'logo_carousel',
+            'logo_carousel' => 'logo_carousel',
+            'woo-account-dashboard' => 'woo_account_dashboard',
+            'woo_account_dashboard' => 'woo_account_dashboard',
+            'ld-courses' => 'ld_courses',
+            'ld_courses' => 'ld_courses',
+        ];
+
+        foreach ($widgetPatterns as $pattern => $widgetType) {
+            if (strpos($path, $pattern) !== false) {
+                return $widgetType;
+            }
+        }
+
+        // Default to unknown widget type
+        return 'unknown_widget';
     }
 }
