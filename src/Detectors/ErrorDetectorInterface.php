@@ -11,11 +11,19 @@ interface ErrorDetectorInterface {
      * @return array Array of detected errors
      */
     public function detect(string $filePath, string $phpVersion, string $wpVersion): array;
-    
+
     /**
      * Get the name of this detector
      *
      * @return string
      */
     public function getName(): string;
+
+    /**
+     * Set the plugin root path for relative path calculation
+     *
+     * @param string $pluginRoot Absolute path to the plugin root directory
+     * @return void
+     */
+    public function setPluginRoot(string $pluginRoot): void;
 }

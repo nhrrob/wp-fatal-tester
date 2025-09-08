@@ -8,6 +8,8 @@ use NHRROB\WPFatalTester\Detectors\ClassConflictDetector;
 use NHRROB\WPFatalTester\Detectors\WordPressCompatibilityDetector;
 use NHRROB\WPFatalTester\Detectors\PHPVersionCompatibilityDetector;
 use NHRROB\WPFatalTester\Detectors\PluginEcosystemDetector;
+use NHRROB\WPFatalTester\Detectors\ThisContextDetector;
+use NHRROB\WPFatalTester\Detectors\TemplateMethodContextDetector;
 use NHRROB\WPFatalTester\Exceptions\DependencyExceptionManager;
 use NHRROB\WPFatalTester\Scanner\FileScanner;
 use NHRROB\WPFatalTester\Reporter\ErrorReporter;
@@ -36,7 +38,49 @@ class FatalTester {
             new ClassConflictDetector($this->exceptionManager),
             new WordPressCompatibilityDetector(),
             new PHPVersionCompatibilityDetector(),
+            new ThisContextDetector(),
+            new TemplateMethodContextDetector(),
         ];
+    }
+
+    /**
+     * Configure widget exclusion settings based on options
+     */
+    private function configureWidgetExclusions(array $options): void {
+        foreach ($this->detectors as $detector) {
+            if ($detector instanceof TemplateMethodContextDetector || $detector instanceof ThisContextDetector) {
+                // Set reporting mode
+                if (isset($options['widget_reporting_mode'])) {
+                    $detector->getWidgetExclusionManager()->setReportingMode($options['widget_reporting_mode']);
+                }
+
+                // Handle temporary widget exclusions
+                if (!empty($options['exclude_widget'])) {
+                    $widgetManager = $detector->getWidgetExclusionManager();
+                    foreach ($options['exclude_widget'] as $widget) {
+                        $widgetManager->addTemporaryExclusion('elementor', $widget, [
+                            'status' => 'temporary_exclude',
+                            'reason' => 'Temporarily excluded via CLI',
+                            'methods' => ['*'],
+                            'error_types' => ['TEMPLATE_METHOD_CONTEXT_ERROR', 'THIS_CONTEXT_ERROR']
+                        ]);
+                    }
+                }
+
+                // Handle forced widget inclusions
+                if (!empty($options['include_widget'])) {
+                    $widgetManager = $detector->getWidgetExclusionManager();
+                    foreach ($options['include_widget'] as $widget) {
+                        $widgetManager->addTemporaryExclusion('elementor', $widget, [
+                            'status' => 'include',
+                            'reason' => 'Force included via CLI',
+                            'methods' => [],
+                            'error_types' => []
+                        ]);
+                    }
+                }
+            }
+        }
     }
 
     public function run(array $options): void {
@@ -52,6 +96,9 @@ class FatalTester {
             echo "   Detected ecosystems: " . implode(', ', $detectedEcosystems) . "\n";
         }
 
+        // Configure widget exclusions
+        $this->configureWidgetExclusions($options);
+
         // Display filtering information
         if (count($this->severityFilter) === 1 && $this->severityFilter[0] === 'error') {
             echo "   Filter: Fatal errors only (use --show-all-errors to see warnings)\n";
@@ -60,6 +107,12 @@ class FatalTester {
         } else {
             echo "   Filter: All error types\n";
         }
+
+        // Display widget exclusion information
+        if (isset($options['widget_reporting_mode']) && $options['widget_reporting_mode'] !== 'fatal_only') {
+            echo "   Widget reporting mode: " . $options['widget_reporting_mode'] . "\n";
+        }
+
         echo "\n";
 
         $pluginPath = $this->getPluginPath($options['plugin']);
@@ -105,6 +158,49 @@ class FatalTester {
         }
 
         $this->displaySummary($allErrors, $options);
+
+        // Display widget exclusion statistics if requested
+        if ($options['show_exclusion_stats'] ?? false) {
+            $this->displayWidgetExclusionStats();
+        }
+    }
+
+    /**
+     * Display widget exclusion statistics
+     */
+    private function displayWidgetExclusionStats(): void {
+        foreach ($this->detectors as $detector) {
+            if ($detector instanceof TemplateMethodContextDetector || $detector instanceof ThisContextDetector) {
+                $widgetManager = $detector->getWidgetExclusionManager();
+                $stats = $widgetManager->getExclusionStats();
+
+                echo "\n📊 WIDGET EXCLUSION STATISTICS\n";
+                echo str_repeat('=', 50) . "\n";
+                echo "Total ecosystems: " . $stats['total_ecosystems'] . "\n";
+                echo "Total widgets configured: " . $stats['total_widgets'] . "\n";
+                echo "Excluded widgets: " . $stats['excluded_widgets'] . "\n";
+                echo "Temporary exclusions: " . $stats['temporary_exclusions'] . "\n";
+                echo "Future-proof widgets: " . $stats['future_proof_widgets'] . "\n";
+                echo "Reporting mode: " . $widgetManager->getReportingMode() . "\n";
+
+                // Display widget details for each ecosystem
+                foreach (['elementor'] as $ecosystem) {
+                    $widgets = $widgetManager->getWidgetExclusions($ecosystem);
+                    if (!empty($widgets)) {
+                        echo "\n{$ecosystem} widgets:\n";
+                        foreach ($widgets as $widgetType => $config) {
+                            $status = $config['status'];
+                            $icon = $status === 'include' ? '✅' : ($status === 'exclude' ? '❌' : '⚠️');
+                            echo "  {$icon} {$widgetType}: {$status}\n";
+                            if (!empty($config['reason'])) {
+                                echo "     Reason: {$config['reason']}\n";
+                            }
+                        }
+                    }
+                }
+                break;
+            }
+        }
     }
 
     private function getPluginPath(string $plugin): string {
@@ -196,12 +292,23 @@ class FatalTester {
             $detectedEcosystems = $options['force_ecosystem'];
         }
 
-        // Pass ecosystem information to detectors that support it
+        // Pass ecosystem information and plugin root to detectors that support it
         foreach ($this->detectors as $detector) {
+            // Set plugin root for all detectors
+            $detector->setPluginRoot($pluginPath);
+
             if ($detector instanceof ClassConflictDetector) {
                 $detector->setDetectedEcosystems($detectedEcosystems);
+                // Pre-scan all files to build class registry for namespace resolution
+                $detector->preScanFiles($files);
             }
             if ($detector instanceof UndefinedFunctionDetector) {
+                $detector->setDetectedEcosystems($detectedEcosystems);
+            }
+            if ($detector instanceof TemplateMethodContextDetector) {
+                $detector->setDetectedEcosystems($detectedEcosystems);
+            }
+            if ($detector instanceof ThisContextDetector) {
                 $detector->setDetectedEcosystems($detectedEcosystems);
             }
         }

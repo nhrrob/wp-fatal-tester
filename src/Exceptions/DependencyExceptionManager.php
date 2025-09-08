@@ -63,7 +63,7 @@ class DependencyExceptionManager {
         if (in_array($functionName, $this->globalExceptions['functions'] ?? [])) {
             return true;
         }
-        
+
         // Check ecosystem-specific exceptions
         foreach ($detectedEcosystems as $ecosystem) {
             $ecosystem = strtolower($ecosystem);
@@ -71,7 +71,7 @@ class DependencyExceptionManager {
                 if (in_array($functionName, $this->ecosystemExceptions[$ecosystem]['functions'])) {
                     return true;
                 }
-                
+
                 // Check for pattern matches
                 foreach ($this->ecosystemExceptions[$ecosystem]['function_patterns'] ?? [] as $pattern) {
                     // Handle wildcard patterns
@@ -88,7 +88,48 @@ class DependencyExceptionManager {
                 }
             }
         }
-        
+
+        return false;
+    }
+
+    /**
+     * Check if a widget method error should be excluded based on widget configuration
+     *
+     * @param string $widgetType
+     * @param string $methodName
+     * @param string $errorType
+     * @param array $detectedEcosystems
+     * @return bool
+     */
+    public function isWidgetMethodExcepted(string $widgetType, string $methodName, string $errorType, array $detectedEcosystems = []): bool {
+        // Check ecosystem-specific widget exceptions
+        foreach ($detectedEcosystems as $ecosystem) {
+            $ecosystem = strtolower($ecosystem);
+            if (isset($this->ecosystemExceptions[$ecosystem]['widget_exclusions'])) {
+                $widgetExclusions = $this->ecosystemExceptions[$ecosystem]['widget_exclusions'];
+
+                // Check if widget type is in exclusion list
+                if (isset($widgetExclusions[$widgetType])) {
+                    $widgetConfig = $widgetExclusions[$widgetType];
+
+                    // Check if method is specifically excluded
+                    if (isset($widgetConfig['methods']) && in_array($methodName, $widgetConfig['methods'])) {
+                        return true;
+                    }
+
+                    // Check if error type is excluded for this widget
+                    if (isset($widgetConfig['error_types']) && in_array($errorType, $widgetConfig['error_types'])) {
+                        return true;
+                    }
+
+                    // Check if widget is completely excluded
+                    if (isset($widgetConfig['exclude_all']) && $widgetConfig['exclude_all'] === true) {
+                        return true;
+                    }
+                }
+            }
+        }
+
         return false;
     }
     
@@ -214,6 +255,7 @@ class DependencyExceptionManager {
                 'Essential_Addons_Elementor\\Classes\\Bootstrap',
                 'Essential_Addons_Elementor\\Classes\\WPDeveloper_Setup_Wizard',
                 'Essential_Addons_Elementor\\Classes\\Helper',
+                'Essential_Addons_Elementor\\Pro\\Classes\\Helper',
                 'Essential_Addons_Elementor\\Classes\\Plugin_Usage_Tracker',
                 'Woo_Cart_Shortcode', 'Woo_Product_List', 'Product_Grid',
 
@@ -223,6 +265,7 @@ class DependencyExceptionManager {
             'class_patterns' => [
                 'Elementor\\*',
                 'ElementorPro\\*',
+                'Essential_Addons_Elementor\\Pro\\*',
                 'Group_Control_*',
                 'Widget_*',
                 'Core\\*',

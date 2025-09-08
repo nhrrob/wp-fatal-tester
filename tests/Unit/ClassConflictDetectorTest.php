@@ -171,20 +171,103 @@ class ClassConflictDetectorTest extends TestCase {
         $this->assertEmpty($undefinedClassErrors, 'PHP built-in classes should not be flagged as undefined');
     }
     
+    public function testClassExistsConditionalNotFlaggedAsUndefined(): void {
+        $content = '<?php
+        // This should NOT be flagged as undefined - it\'s properly guarded with class_exists()
+        if ( class_exists( \'\Essential_Addons_Elementor\Pro\Classes\Bootstrap\' ) ) {
+            \Essential_Addons_Elementor\Pro\Classes\Bootstrap::instance();
+        }
+
+        // This should also NOT be flagged - different syntax variations
+        if (class_exists("SomeOtherClass")) {
+            new SomeOtherClass();
+        }
+
+        if (class_exists(\'AnotherClass\')) {
+            AnotherClass::staticMethod();
+        }
+        ';
+
+        $filePath = $this->createTestFile('class_exists_test.php', $content);
+        $errors = $this->detector->detect($filePath, '8.0', '6.0');
+
+        // Filter for undefined class errors only
+        $undefinedClassErrors = array_filter($errors, function($error) {
+            return $error->type === 'UNDEFINED_CLASS';
+        });
+
+        $this->assertEmpty($undefinedClassErrors, 'Classes used within class_exists() conditionals should not be flagged as undefined');
+    }
+
+    public function testUnguardedClassUsageStillDetected(): void {
+        $content = '<?php
+        // This SHOULD be flagged as undefined - not guarded by class_exists()
+        $unguarded = new UnguardedUndefinedClass();
+        UnguardedStaticClass::method();
+
+        // This should NOT be flagged - properly guarded
+        if (class_exists("GuardedClass")) {
+            new GuardedClass();
+        }
+        ';
+
+        $filePath = $this->createTestFile('mixed_usage_test.php', $content);
+        $errors = $this->detector->detect($filePath, '8.0', '6.0');
+
+        // Filter for undefined class errors only
+        $undefinedClassErrors = array_filter($errors, function($error) {
+            return $error->type === 'UNDEFINED_CLASS';
+        });
+
+        $this->assertCount(2, $undefinedClassErrors, 'Unguarded undefined classes should still be detected');
+
+        $errorMessages = array_map(function($error) {
+            return $error->message;
+        }, $undefinedClassErrors);
+
+        $this->assertContains("Class 'UnguardedUndefinedClass' not found", $errorMessages);
+        $this->assertContains("Class 'UnguardedStaticClass' not found", $errorMessages);
+    }
+
+    public function testInterfaceExistsAndTraitExistsGuards(): void {
+        $content = '<?php
+        // These should NOT be flagged - guarded by interface_exists() and trait_exists()
+        if (interface_exists("SomeInterface")) {
+            class MyClass implements SomeInterface {}
+        }
+
+        if (trait_exists("SomeTrait")) {
+            class AnotherClass {
+                use SomeTrait;
+            }
+        }
+        ';
+
+        $filePath = $this->createTestFile('interface_trait_guards_test.php', $content);
+        $errors = $this->detector->detect($filePath, '8.0', '6.0');
+
+        // Filter for undefined class errors only
+        $undefinedClassErrors = array_filter($errors, function($error) {
+            return $error->type === 'UNDEFINED_CLASS';
+        });
+
+        $this->assertEmpty($undefinedClassErrors, 'Classes/interfaces/traits guarded by interface_exists() and trait_exists() should not be flagged');
+    }
+
     public function testUndefinedClassStillDetected(): void {
         $content = '<?php
         $custom = new SomeUndefinedCustomClass();
         $another = new AnotherNonExistentClass();
         ';
-        
+
         $filePath = $this->createTestFile('undefined_class_test.php', $content);
         $errors = $this->detector->detect($filePath, '8.0', '6.0');
-        
+
         // Filter for undefined class errors only
         $undefinedClassErrors = array_filter($errors, function($error) {
             return $error->type === 'UNDEFINED_CLASS';
         });
-        
+
         $this->assertCount(2, $undefinedClassErrors, 'Truly undefined classes should still be detected');
 
         $errorMessages = array_map(function($error) {

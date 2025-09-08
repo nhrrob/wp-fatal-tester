@@ -25,6 +25,14 @@ A comprehensive CLI tool to detect fatal PHP errors and compatibility issues in 
 - Detects WordPress-specific patterns and functions
 - Identifies version-specific syntax and features
 
+### 🎯 **Widget Exclusion System** (New!)
+- **Reduces False Positives**: Smart exclusion of widgets without "Load More" functionality
+- **AJAX Context Awareness**: Detects template method context issues in AJAX operations
+- **Future-Proof Design**: Temporary exclusions with review dates for evolving widgets
+- **Multiple Reporting Modes**: Fatal-only, all-errors, and debug modes
+- **Configurable Rules**: JSON-based configuration for easy customization
+- **CLI Integration**: Command-line options for quick adjustments
+
 ## Installation
 
 ```bash
@@ -93,6 +101,29 @@ This comprehensive testing matrix ensures your plugin works across **20 differen
 - **Warnings** (severity: `warning`) are about deprecated features or potential future issues
 
 Use `--show-all-errors` to see warnings and other non-fatal issues when needed.
+
+### Widget Exclusion System
+
+The tool now includes a sophisticated widget exclusion system to reduce false positives, especially for AJAX "Load More" operations:
+
+```bash
+# Default behavior - automatically excludes widgets without load more functionality
+vendor/bin/fataltest my-plugin
+
+# Show all errors including excluded ones for debugging
+vendor/bin/fataltest my-plugin --widget-reporting-mode all_errors
+
+# Debug widget exclusion decisions
+vendor/bin/fataltest my-plugin --debug-widget-exclusions
+
+# Use custom widget configuration
+vendor/bin/fataltest my-plugin --widget-config-file ./my-config.json
+
+# Show exclusion statistics
+vendor/bin/fataltest my-plugin --show-exclusion-stats
+```
+
+**Quick Start**: If you're seeing many false positives from Elementor widgets, see `QUICK_START_WIDGET_EXCLUSIONS.md` for immediate solutions.
 
 ### Tested with Essential Addons for Elementor
 

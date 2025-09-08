@@ -23,6 +23,11 @@ class ArgumentParser {
             'disable_ecosystem_detection' => false,
             'force_ecosystem' => null,
             'ignore_dependency_errors' => false,
+            'widget_reporting_mode' => 'fatal_only', // New: Widget exclusion reporting mode
+            'widget_config_file' => null, // New: External widget configuration file
+            'show_exclusion_stats' => false, // New: Show widget exclusion statistics
+            'exclude_widget' => [], // New: Temporarily exclude specific widgets
+            'include_widget' => [], // New: Force include specific widgets
         ];
     }
     
@@ -128,8 +133,49 @@ class ArgumentParser {
             case '--ignore-dependency-errors':
                 $this->options['ignore_dependency_errors'] = true;
                 break;
+
+            case '--widget-reporting-mode':
+                if (isset($this->arguments[$index + 1])) {
+                    $mode = trim($this->arguments[$index + 1]);
+                    if (in_array($mode, ['fatal_only', 'all_errors', 'debug_mode'])) {
+                        $this->options['widget_reporting_mode'] = $mode;
+                    }
+                    return $index + 1;
+                }
+                break;
+
+            case '--widget-config-file':
+                if (isset($this->arguments[$index + 1])) {
+                    $this->options['widget_config_file'] = trim($this->arguments[$index + 1]);
+                    return $index + 1;
+                }
+                break;
+
+            case '--show-exclusion-stats':
+                $this->options['show_exclusion_stats'] = true;
+                break;
+
+            case '--exclude-widget':
+                if (isset($this->arguments[$index + 1])) {
+                    $widgets = explode(',', $this->arguments[$index + 1]);
+                    $this->options['exclude_widget'] = array_map('trim', $widgets);
+                    return $index + 1;
+                }
+                break;
+
+            case '--include-widget':
+                if (isset($this->arguments[$index + 1])) {
+                    $widgets = explode(',', $this->arguments[$index + 1]);
+                    $this->options['include_widget'] = array_map('trim', $widgets);
+                    return $index + 1;
+                }
+                break;
+
+            case '--debug-widget-exclusions':
+                $this->options['widget_reporting_mode'] = 'debug_mode';
+                break;
         }
-        
+
         return $index;
     }
     
@@ -159,6 +205,14 @@ ECOSYSTEM OPTIONS:
     --force-ecosystem ECOSYSTEMS     Force specific ecosystems (elementor,woocommerce)
     --ignore-dependency-errors       Ignore all dependency-related errors
 
+WIDGET EXCLUSION OPTIONS:
+    --widget-reporting-mode MODE     Set widget error reporting mode (fatal_only,all_errors,debug_mode)
+    --widget-config-file FILE        Load widget exclusion configuration from file
+    --show-exclusion-stats           Show widget exclusion statistics
+    --exclude-widget WIDGETS         Temporarily exclude specific widgets (comma-separated)
+    --include-widget WIDGETS         Force include specific widgets (comma-separated)
+    --debug-widget-exclusions        Enable debug mode for widget exclusions
+
 EXAMPLES:
     fataltest                           # Test current directory, fatal errors only
     fataltest my-plugin                 # Test specific plugin, fatal errors only
@@ -170,6 +224,10 @@ EXAMPLES:
     fataltest --force-ecosystem elementor  # Force Elementor ecosystem detection
     fataltest --disable-ecosystem-detection  # Disable ecosystem detection
     fataltest --ignore-dependency-errors     # Ignore dependency-related errors
+    fataltest --widget-reporting-mode all_errors  # Show all widget errors including excluded
+    fataltest --debug-widget-exclusions       # Debug widget exclusion system
+    fataltest --exclude-widget post_carousel,media_carousel  # Exclude specific widgets
+    fataltest --widget-config-file ./widget-config.json     # Use custom widget config
 
 SEVERITY LEVELS:
     error    Fatal errors that will break plugin functionality
