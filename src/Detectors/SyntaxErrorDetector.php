@@ -111,6 +111,7 @@ class SyntaxErrorDetector implements ErrorDetectorInterface {
             }
 
             // Check for unmatched brackets
+            // Check for unmatched brackets
             if ($this->hasUnmatchedBrackets($line)) {
                 $errors[] = new FatalError(
                     type: 'UNMATCHED_BRACKETS',
@@ -171,6 +172,20 @@ class SyntaxErrorDetector implements ErrorDetectorInterface {
             return false;
         }
 
+        // Skip multi-line string literals in echo/print statements
+        // These are lines that start with echo/print and an opening quote but don't have a closing quote + semicolon
+        if (preg_match('/^\s*(echo|print)\s+/', $line)) {
+            // Check if this looks like the start of a multi-line string
+            // Count quotes to see if string is not closed
+            $singleQuotes = substr_count($line, "'");
+            $doubleQuotes = substr_count($line, '"');
+
+            // If line starts with echo and has an odd number of quotes (unclosed string), skip it
+            if (($singleQuotes % 2 === 1) || ($doubleQuotes % 2 === 1)) {
+                return false;
+            }
+        }
+
         // Skip WordPress hook declarations and similar patterns
         if (preg_match('/add_(action|filter)\s*\(/', $line) ||
             preg_match('/do_action\s*\(/', $line) ||
@@ -210,6 +225,8 @@ class SyntaxErrorDetector implements ErrorDetectorInterface {
             return false;
         }
 
+
+
         // Skip lines that are only closing brackets (with optional comments)
         if (preg_match('/^\s*[\}\]\)]+\s*(?:\/\/.*)?$/', $line)) {
             return false;
@@ -217,6 +234,24 @@ class SyntaxErrorDetector implements ErrorDetectorInterface {
 
         // Skip lines that are only opening brackets for multi-line structures
         if (preg_match('/^\s*[\{\[\(]+\s*(?:\/\/.*)?$/', $line)) {
+            return false;
+        }
+
+        // Skip multi-line function calls and method calls (check BEFORE string removal)
+        // Pattern 1: Lines that end with a comma (likely continuation of function arguments)
+        if (preg_match('/,\s*(?:\/\/.*)?$/', $line)) {
+            return false;
+        }
+
+        // Pattern 2: Method calls that span multiple lines (e.g., $this->method( 'arg1', 'arg2',)
+        // More flexible pattern to catch various method call formats
+        if (preg_match('/\$\w+\s*->\s*\w+\s*\(.*[^)]\s*$/', $line)) {
+            return false;
+        }
+
+        // Pattern 3: Function calls that span multiple lines (e.g., function_name( 'arg1', 'arg2',)
+        // More flexible pattern to catch various function call formats
+        if (preg_match('/\w+\s*\(.*[^)]\s*$/', $line) && !preg_match('/;\s*$/', $line)) {
             return false;
         }
 
@@ -240,8 +275,32 @@ class SyntaxErrorDetector implements ErrorDetectorInterface {
             return false;
         }
 
+        // Pattern 4: Lines that are clearly continuation of multi-line calls (indented and start with arguments)
+        if (preg_match('/^\s+[^=\w\$]/', $line) && ($openCount > 0 || $closeCount > 0)) {
+            return false;
+        }
+
+        // Pattern 5: Lines that are continuation/closing lines of multi-line method calls
+        // These typically have more closing brackets than opening brackets and end with );
+        // Note: line is already trimmed, so we don't check for leading whitespace
+        if (preg_match('/.*\)\s*;\s*$/', $line) && $closeCount > $openCount) {
+            return false;
+        }
+
+        // Pattern 6: Lines that end with opening brackets but don't end with semicolon (multi-line structures)
+        if (preg_match('/[\(\[\{]\s*(?:\/\/.*)?$/', $line) && !preg_match('/;\s*$/', $line)) {
+            return false;
+        }
+
+        // Pattern 7: Lines that start with closing brackets (likely end of multi-line structure)
+        if (preg_match('/^\s*[\)\]\}]/', $line)) {
+            return false;
+        }
+
         // Only flag as error if there's a significant imbalance in a single statement line
         $imbalance = abs($openCount - $closeCount);
+
+
 
         // Be more conservative - only flag obvious syntax errors
         // Don't flag lines that end with opening brackets (likely multi-line)
