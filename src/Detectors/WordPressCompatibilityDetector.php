@@ -60,16 +60,37 @@ class WordPressCompatibilityDetector implements ErrorDetectorInterface {
 
     private function checkDeprecatedFunctions(string $line, string $filePath, int $lineNumber, string $wpVersion): array {
         $errors = [];
-        
+
+        // Remove single-line comments first (but preserve the line structure)
+        $lineWithoutComments = preg_replace('/\/\/.*$/', '', $line);
+        $lineWithoutComments = preg_replace('/\/\*.*?\*\//', '', $lineWithoutComments);
+
+        // Skip if line becomes empty after comment removal
+        if (trim($lineWithoutComments) === '') {
+            return [];
+        }
+
         foreach ($this->deprecatedFunctions as $function => $info) {
-            if (preg_match('/\b' . preg_quote($function, '/') . '\s*\(/', $line)) {
+            // Check if the function is called in this line
+            if (preg_match('/\b' . preg_quote($function, '/') . '\s*\(/', $lineWithoutComments)) {
+                // Skip method calls (contains -> or ::) - these are not deprecated WordPress functions
+                // but rather method calls on objects/classes (e.g., $document->get_settings() from Elementor)
+                if (strpos($lineWithoutComments, '->') !== false || strpos($lineWithoutComments, '::') !== false) {
+                    continue;
+                }
+
+                // Skip function definitions (contains 'function' keyword before the function name)
+                if (preg_match('/\bfunction\s+' . preg_quote($function, '/') . '\s*\(/', $lineWithoutComments)) {
+                    continue;
+                }
+
                 $deprecatedVersion = $info['deprecated'];
                 $replacement = $info['replacement'] ?? null;
-                
+
                 if (version_compare($wpVersion, $deprecatedVersion, '>=')) {
                     $message = "Function '{$function}' is deprecated since WordPress {$deprecatedVersion}";
                     $suggestion = $replacement ? "Use '{$replacement}' instead" : "Find an alternative implementation";
-                    
+
                     $errors[] = new FatalError(
                         type: 'DEPRECATED_FUNCTION',
                         message: $message,
@@ -88,22 +109,43 @@ class WordPressCompatibilityDetector implements ErrorDetectorInterface {
                 }
             }
         }
-        
+
         return $errors;
     }
 
     private function checkRemovedFunctions(string $line, string $filePath, int $lineNumber, string $wpVersion): array {
         $errors = [];
-        
+
+        // Remove single-line comments first (but preserve the line structure)
+        $lineWithoutComments = preg_replace('/\/\/.*$/', '', $line);
+        $lineWithoutComments = preg_replace('/\/\*.*?\*\//', '', $lineWithoutComments);
+
+        // Skip if line becomes empty after comment removal
+        if (trim($lineWithoutComments) === '') {
+            return [];
+        }
+
         foreach ($this->removedFunctions as $function => $info) {
-            if (preg_match('/\b' . preg_quote($function, '/') . '\s*\(/', $line)) {
+            // Check if the function is called in this line
+            if (preg_match('/\b' . preg_quote($function, '/') . '\s*\(/', $lineWithoutComments)) {
+                // Skip method calls (contains -> or ::) - these are not removed WordPress functions
+                // but rather method calls on objects/classes
+                if (strpos($lineWithoutComments, '->') !== false || strpos($lineWithoutComments, '::') !== false) {
+                    continue;
+                }
+
+                // Skip function definitions (contains 'function' keyword before the function name)
+                if (preg_match('/\bfunction\s+' . preg_quote($function, '/') . '\s*\(/', $lineWithoutComments)) {
+                    continue;
+                }
+
                 $removedVersion = $info['removed'];
                 $replacement = $info['replacement'] ?? null;
-                
+
                 if (version_compare($wpVersion, $removedVersion, '>=')) {
                     $message = "Function '{$function}' was removed in WordPress {$removedVersion}";
                     $suggestion = $replacement ? "Use '{$replacement}' instead" : "This function is no longer available";
-                    
+
                     $errors[] = new FatalError(
                         type: 'REMOVED_FUNCTION',
                         message: $message,
@@ -128,9 +170,30 @@ class WordPressCompatibilityDetector implements ErrorDetectorInterface {
 
     private function checkVersionRequirements(string $line, string $filePath, int $lineNumber, string $wpVersion): array {
         $errors = [];
-        
+
+        // Remove single-line comments first (but preserve the line structure)
+        $lineWithoutComments = preg_replace('/\/\/.*$/', '', $line);
+        $lineWithoutComments = preg_replace('/\/\*.*?\*\//', '', $lineWithoutComments);
+
+        // Skip if line becomes empty after comment removal
+        if (trim($lineWithoutComments) === '') {
+            return [];
+        }
+
         foreach ($this->versionRequirements as $function => $requiredVersion) {
-            if (preg_match('/\b' . preg_quote($function, '/') . '\s*\(/', $line)) {
+            // Check if the function is called in this line
+            if (preg_match('/\b' . preg_quote($function, '/') . '\s*\(/', $lineWithoutComments)) {
+                // Skip method calls (contains -> or ::) - these are not WordPress functions
+                // but rather method calls on objects/classes
+                if (strpos($lineWithoutComments, '->') !== false || strpos($lineWithoutComments, '::') !== false) {
+                    continue;
+                }
+
+                // Skip function definitions (contains 'function' keyword before the function name)
+                if (preg_match('/\bfunction\s+' . preg_quote($function, '/') . '\s*\(/', $lineWithoutComments)) {
+                    continue;
+                }
+
                 if (version_compare($wpVersion, $requiredVersion, '<')) {
                     $errors[] = new FatalError(
                         type: 'VERSION_REQUIREMENT',
@@ -149,7 +212,7 @@ class WordPressCompatibilityDetector implements ErrorDetectorInterface {
                 }
             }
         }
-        
+
         return $errors;
     }
 
